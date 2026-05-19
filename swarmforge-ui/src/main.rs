@@ -34,10 +34,9 @@ async fn sse_handler(
 ) -> Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>> {
     let (tx, rx) = mpsc::channel::<events::Payload>(256);
 
-    // Send roles event immediately
+    // Send roles event immediately (synchronous so it's guaranteed first)
     let roles: Vec<String> = state.roles.iter().map(|s| s.role.clone()).collect();
-    let tx2 = tx.clone();
-    tokio::spawn(async move { let _ = tx2.send(events::Payload::Roles { roles }).await; });
+    let _ = tx.try_send(events::Payload::Roles { roles });
 
     // Tail each pane log
     for session in state.roles.iter() {
