@@ -406,6 +406,8 @@ launch_role() {
   fi
 
   tmux send-keys -t "${session}:${display}.0" "$launch_cmd" Enter
+  mkdir -p "$STATE_DIR/panes"
+  tmux pipe-pane -t "${session}:${display}.0" -o "cat >> '$STATE_DIR/panes/${role}.log'"
   echo -e "  ${CYAN}[${display}]${RESET} started in session ${session}"
 }
 
@@ -464,6 +466,21 @@ for (( i = 1; i <= ${#ROLES[@]}; i++ )); do
 done
 
 echo ""
+UI_SOURCE="$SCRIPT_DIR/swarmforge-ui"
+UI_BINARY="$UI_SOURCE/target/release/swarmforge-ui"
+if [[ -d "$UI_SOURCE" ]] && has_command cargo; then
+  if [[ ! -x "$UI_BINARY" ]] || [[ "$UI_SOURCE/src/main.rs" -nt "$UI_BINARY" ]]; then
+    echo -e "${CYAN}Building SwarmForge UI...${RESET}"
+    (cd "$UI_SOURCE" && cargo build --release --quiet)
+  fi
+fi
+if [[ -x "$UI_BINARY" ]]; then
+  "$UI_BINARY" --port 7777 --working-dir "$WORKING_DIR" &
+  echo -e "${GREEN}SwarmForge UI: http://localhost:7777${RESET}"
+  if has_command osascript; then
+    open "http://localhost:7777"
+  fi
+fi
 echo -e "${GREEN}${BOLD}SwarmForge is ready.${RESET}"
 echo -e "Working directory: ${WORKING_DIR}"
 echo -e "Sessions:"
