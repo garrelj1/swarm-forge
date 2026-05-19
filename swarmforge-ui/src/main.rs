@@ -72,6 +72,81 @@ mod events {
     }
 }
 
+mod tailer {
+    use std::path::PathBuf;
+    use std::time::Duration;
+    use tokio::io::{AsyncBufReadExt, BufReader};
+    use tokio::sync::mpsc;
+    use tokio::time;
+
+    pub async fn tail(path: PathBuf, tx: mpsc::Sender<String>) {
+        // Wait for file to exist (agents may start slightly after the UI)
+        let deadline = time::Instant::now() + Duration::from_secs(10);
+        while !path.exists() {
+            if time::Instant::now() > deadline { return; }
+            time::sleep(Duration::from_millis(500)).await;
+        }
+
+        let file = match tokio::fs::File::open(&path).await {
+            Ok(f) => f,
+            Err(_) => return,
+        };
+        let mut reader = BufReader::new(file);
+        let mut line = String::new();
+
+        loop {
+            line.clear();
+            match reader.read_line(&mut line).await {
+                Ok(0) => time::sleep(Duration::from_millis(200)).await,
+                Ok(_) => { if tx.send(line.clone()).await.is_err() { return; } }
+                Err(_) => return,
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use std::io::Write;
+
+        #[tokio::test]
+        async fn reads_existing_lines() {
+            let mut f = tempfile::NamedTempFile::new().unwrap();
+            writeln!(f, "line one").unwrap();
+            writeln!(f, "line two").unwrap();
+            f.flush().unwrap();
+
+            let (tx, mut rx) = mpsc::channel(10);
+            tokio::spawn(tail(f.path().to_path_buf(), tx));
+
+            let l1 = time::timeout(Duration::from_secs(2), rx.recv()).await
+                .expect("timeout").expect("closed");
+            let l2 = time::timeout(Duration::from_secs(2), rx.recv()).await
+                .expect("timeout").expect("closed");
+
+            assert_eq!(l1.trim_end(), "line one");
+            assert_eq!(l2.trim_end(), "line two");
+        }
+
+        #[tokio::test]
+        async fn picks_up_appended_lines() {
+            let f = tempfile::NamedTempFile::new().unwrap();
+            let path = f.path().to_path_buf();
+
+            let (tx, mut rx) = mpsc::channel(10);
+            tokio::spawn(tail(path.clone(), tx));
+            time::sleep(Duration::from_millis(100)).await;
+
+            let mut file = std::fs::OpenOptions::new().append(true).open(&path).unwrap();
+            writeln!(file, "appended").unwrap();
+
+            let line = time::timeout(Duration::from_secs(2), rx.recv()).await
+                .expect("timeout").expect("closed");
+            assert_eq!(line.trim_end(), "appended");
+        }
+    }
+}
+
 mod sessions {
     use std::path::Path;
 
