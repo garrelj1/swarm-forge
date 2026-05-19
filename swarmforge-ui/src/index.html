@@ -41,21 +41,43 @@ const terminals = {};
 function createPanel(role) {
   const panel = document.createElement('div');
   panel.className = 'agent-panel';
-  panel.innerHTML = `
-    <h3>${role}</h3>
-    <div class="term-wrap" id="term-${role}"></div>
-    <div class="input-row">
-      <input id="input-${role}" type="text" placeholder="send keys…"
-        onkeydown="if(event.key==='Enter'){sendKeys('${role}')}"/>
-      <button onclick="sendKeys('${role}')">Send</button>
-      <button onclick="sendEnter('${role}')">↵</button>
-    </div>`;
+
+  const h3 = document.createElement('h3');
+  h3.textContent = role;
+
+  const termWrap = document.createElement('div');
+  termWrap.className = 'term-wrap';
+  termWrap.id = `term-${role}`;
+
+  const input = document.createElement('input');
+  input.id = `input-${role}`;
+  input.type = 'text';
+  input.placeholder = 'send keys…';
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') sendKeys(role); });
+
+  const sendBtn = document.createElement('button');
+  sendBtn.textContent = 'Send';
+  sendBtn.addEventListener('click', () => sendKeys(role));
+
+  const enterBtn = document.createElement('button');
+  enterBtn.textContent = '↵';
+  enterBtn.addEventListener('click', () => sendEnter(role));
+
+  const inputRow = document.createElement('div');
+  inputRow.className = 'input-row';
+  inputRow.appendChild(input);
+  inputRow.appendChild(sendBtn);
+  inputRow.appendChild(enterBtn);
+
+  panel.appendChild(h3);
+  panel.appendChild(termWrap);
+  panel.appendChild(inputRow);
   document.getElementById('agents').appendChild(panel);
 
   const term = new Terminal({ scrollback: 5000, fontSize: 12, theme: { background: '#0d0d0d' } });
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
-  term.open(document.getElementById(`term-${role}`));
+  term.open(termWrap);
   fit.fit();
   terminals[role] = { term, fit };
 }
