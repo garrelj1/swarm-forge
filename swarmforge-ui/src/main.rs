@@ -1,3 +1,105 @@
+use axum::{
+    extract::{Path, State},
+    response::sse::{Event, Sse},
+    routing::{get, post},
+    Json, Router,
+};
+use std::convert::Infallible;
+use std::sync::Arc;
+use tokio::sync::mpsc;
+use tokio_stream::{wrappers::ReceiverStream, StreamExt};
+
+#[derive(Clone)]
+struct AppState {
+    roles: Arc<Vec<sessions::Session>>,
+    working_dir: std::path::PathBuf,
+}
+
+fn tmux_target(session: &str) -> String {
+    format!("{}:0.0", session)
+}
+
+#[cfg(test)]
+mod handler_tests {
+    use super::*;
+
+    #[test]
+    fn formats_tmux_target() {
+        assert_eq!(tmux_target("swarmforge-coder"), "swarmforge-coder:0.0");
+    }
+}
+
+async fn sse_handler(
+    State(state): State<AppState>,
+) -> Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>> {
+    let (tx, rx) = mpsc::channel::<events::Payload>(256);
+
+    // Send roles event immediately
+    let roles: Vec<String> = state.roles.iter().map(|s| s.role.clone()).collect();
+    let tx2 = tx.clone();
+    tokio::spawn(async move { let _ = tx2.send(events::Payload::Roles { roles }).await; });
+
+    // Tail each pane log
+    for session in state.roles.iter() {
+        let log = state.working_dir.join(format!(".swarmforge/panes/{}.log", session.role));
+        let role = session.role.clone();
+        let tx2 = tx.clone();
+        tokio::spawn(async move {
+            let (ltx, mut lrx) = mpsc::channel(256);
+            tokio::spawn(tailer::tail(log, ltx));
+            while let Some(text) = lrx.recv().await {
+                if tx2.send(events::Payload::Pane { role: role.clone(), text }).await.is_err() { break; }
+            }
+        });
+    }
+
+    // Tail message log
+    {
+        let log = state.working_dir.join("logs/agent_messages.log");
+        let tx2 = tx.clone();
+        tokio::spawn(async move {
+            let (ltx, mut lrx) = mpsc::channel(256);
+            tokio::spawn(tailer::tail(log, ltx));
+            while let Some(line) = lrx.recv().await {
+                if let Some((role, text)) = events::parse_message_line(&line) {
+                    if tx2.send(events::Payload::Message { role, text }).await.is_err() { break; }
+                }
+            }
+        });
+    }
+
+    let stream = ReceiverStream::new(rx).map(|payload| {
+        let name = events::event_name(&payload);
+        let data = serde_json::to_string(&payload).unwrap();
+        Ok::<Event, Infallible>(Event::default().event(name).data(data))
+    });
+
+    Sse::new(stream).keep_alive(axum::response::sse::KeepAlive::default())
+}
+
+#[derive(serde::Deserialize)]
+struct SendBody { keys: String }
+
+async fn send_handler(
+    Path(role): Path<String>,
+    State(state): State<AppState>,
+    Json(body): Json<SendBody>,
+) -> axum::http::StatusCode {
+    let Some(session) = state.roles.iter().find(|s| s.role == role).map(|s| s.session.clone()) else {
+        return axum::http::StatusCode::NOT_FOUND;
+    };
+    let target = tmux_target(&session);
+    if !body.keys.is_empty() {
+        std::process::Command::new("tmux")
+            .args(["send-keys", "-t", &target, "-l", "--", &body.keys])
+            .output().ok();
+    }
+    std::process::Command::new("tmux")
+        .args(["send-keys", "-t", &target, "Enter"])
+        .output().ok();
+    axum::http::StatusCode::OK
+}
+
 fn main() {
     println!("swarmforge-ui");
 }
