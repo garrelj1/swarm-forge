@@ -4,10 +4,20 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use clap::Parser;
 use std::convert::Infallible;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_stream::{wrappers::ReceiverStream, StreamExt};
+
+#[derive(Parser)]
+#[command(name = "swarmforge-ui")]
+struct Args {
+    #[arg(long, default_value = "7777")]
+    port: u16,
+    #[arg(long, default_value = ".")]
+    working_dir: std::path::PathBuf,
+}
 
 #[derive(Clone)]
 struct AppState {
@@ -99,8 +109,30 @@ async fn send_handler(
     axum::http::StatusCode::OK
 }
 
-fn main() {
-    println!("swarmforge-ui");
+const INDEX_HTML: &str = include_str!("index.html");
+
+async fn index_handler() -> axum::response::Html<&'static str> {
+    axum::response::Html(INDEX_HTML)
+}
+
+#[tokio::main]
+async fn main() {
+    let args = Args::parse();
+    let sessions_path = args.working_dir.join(".swarmforge/sessions.tsv");
+    let roles = Arc::new(sessions::parse(&sessions_path));
+
+    println!("SwarmForge UI — {} agent(s) — http://localhost:{}", roles.len(), args.port);
+
+    let state = AppState { roles, working_dir: args.working_dir };
+    let app = Router::new()
+        .route("/", get(index_handler))
+        .route("/events", get(sse_handler))
+        .route("/send/:role", post(send_handler))
+        .with_state(state);
+
+    let addr = format!("0.0.0.0:{}", args.port);
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
 }
 
 mod events {
