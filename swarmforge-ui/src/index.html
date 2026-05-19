@@ -86,11 +86,12 @@ msgs.addEventListener('scroll', () => {
 
 const es = new EventSource('/events');
 
+window.addEventListener('resize', () => {
+  Object.values(terminals).forEach(({ fit }) => fit.fit());
+});
+
 es.addEventListener('roles', e => {
   JSON.parse(e.data).forEach(createPanel);
-  window.addEventListener('resize', () => {
-    Object.values(terminals).forEach(({ fit }) => fit.fit());
-  });
 });
 
 es.addEventListener('pane', e => {
@@ -102,7 +103,11 @@ es.addEventListener('message', e => {
   const { role, text } = JSON.parse(e.data);
   const div = document.createElement('div');
   div.className = 'msg';
-  div.innerHTML = `<span class="role">[${role}]</span> ${text}`;
+  const roleSpan = document.createElement('span');
+  roleSpan.className = 'role';
+  roleSpan.textContent = `[${role}]`;
+  div.appendChild(roleSpan);
+  div.appendChild(document.createTextNode(` ${text}`));
   msgs.appendChild(div);
   if (autoScroll) msgs.scrollTop = msgs.scrollHeight;
 });
