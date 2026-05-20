@@ -3,6 +3,7 @@
 .claude/
 .swarmforge/
 .worktrees/
+docs/plans/
 swarmtools/
 logs/
 agent_context/
