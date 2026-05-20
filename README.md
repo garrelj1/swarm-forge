@@ -135,7 +135,7 @@ Use these example directories as starting points for project-local `swarmforge/`
 - In the directory where you want to use SwarmForge, pull the repository contents without creating a Git remote:
 
   ```sh
-  curl -L https://github.com/unclebob/swarm-forge/archive/refs/heads/main.tar.gz | tar -xz --strip-components=1
+  curl -L https://github.com/garrelj1/swarm-forge/archive/refs/heads/main.tar.gz | tar -xz --strip-components=1
   ```
 
   This includes `swarmforge-ui/`, the source for the browser-based dashboard. `swarmforge.sh` builds it automatically on first run if `cargo` is available.
