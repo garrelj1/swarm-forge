@@ -9,6 +9,8 @@ fi
 WINDOW_IDS_FILE="$1"
 shift
 
+pkill -f "swarmforge-ui --port" 2>/dev/null || true
+
 for session in "$@"; do
   tmux kill-session -t "$session" 2>/dev/null || true
 done

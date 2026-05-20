@@ -1,0 +1,39 @@
+# Stack
+
+## Languages
+- Backend:  <language and runtime, e.g. Rust (Cargo)>
+- Frontend: <language and runtime, e.g. TypeScript + React + Vite>
+
+## Commands
+
+### Build
+- Backend:  <e.g. cargo build>
+- Frontend: <e.g. cd web && npm run build>
+
+### Test
+- Backend:  <e.g. cargo test>
+- Frontend: <e.g. cd web && npx vitest run>
+
+### Type Check / Lint
+- Backend:  <e.g. cargo clippy -- -D warnings>
+- Frontend: <e.g. cd web && tsc --noEmit>
+
+### Format
+- Backend:  <e.g. cargo fmt>
+- Frontend: <e.g. cd web && npx prettier --write src/>
+
+## Quality Tools (install if missing)
+
+- Coverage:  <tool name>
+  Install:   <install command>
+  Run:       <run command>
+
+- Mutation:  <tool name>
+  Install:   <install command>
+  Run:       <run command, e.g. cargo mutants -j 4>
+
+## Quality Thresholds
+- Lint:      zero warnings
+- Tests:     all pass
+- Coverage:  80%+
+- Mutation:  90%+ survivors killed

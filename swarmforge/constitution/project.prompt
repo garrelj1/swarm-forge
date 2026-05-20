@@ -1,6 +1,6 @@
 # Project Rules
 
-- This project is configured for SwarmForge with four Codex-backed agents: specifier, coder, refactorer, and architect.
+- This project is configured for SwarmForge. Agent roles, toolchain, and quality thresholds are defined in the swarmforge prompts.
 - Preserve project-local SwarmForge configuration under `swarmforge/`.
 - Keep swarm state local under `.swarmforge/`, worktrees under `.worktrees/`, helper scripts under `swarmtools/`, logs under `logs/`, and shared agent context under `agent_context/`.
 - Prefer small, explicit handoffs with clear branch names, commit hashes, and changed behavior.
