@@ -139,7 +139,7 @@ async fn cleanup_handler(State(state): State<AppState>) -> axum::http::StatusCod
 async fn main() {
     let args = Args::parse();
     let sessions_path = args.working_dir.join(".swarmforge/sessions.tsv");
-    let roles = Arc::new(sessions::parse(&sessions_path));
+    let roles = Arc::new(sessions::parse_live(&sessions_path));
 
     // swarm-cleanup.sh lives alongside swarmforge.sh, four levels up from the binary
     // (<repo>/swarmforge-ui/target/{debug,release}/swarmforge-ui → <repo>/)
@@ -324,6 +324,16 @@ mod sessions {
             } else {
                 None
             }
+        }).collect()
+    }
+
+    pub fn parse_live(path: &Path) -> Vec<Session> {
+        parse(path).into_iter().filter(|s| {
+            std::process::Command::new("tmux")
+                .args(["has-session", "-t", &s.session])
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
         }).collect()
     }
 
