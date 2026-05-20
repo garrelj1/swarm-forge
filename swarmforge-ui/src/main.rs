@@ -23,6 +23,7 @@ struct Args {
 struct AppState {
     roles: Arc<Vec<sessions::Session>>,
     working_dir: std::path::PathBuf,
+    script_dir: std::path::PathBuf,
 }
 
 fn tmux_target(session: &str) -> String {
@@ -119,19 +120,41 @@ async fn index_handler() -> axum::response::Html<&'static str> {
     axum::response::Html(INDEX_HTML)
 }
 
+async fn cleanup_handler(State(state): State<AppState>) -> axum::http::StatusCode {
+    let cleanup_script = state.script_dir.join("swarm-cleanup.sh");
+    if !cleanup_script.exists() {
+        return axum::http::StatusCode::NOT_FOUND;
+    }
+    let window_ids = state.working_dir.join(".swarmforge/window-ids");
+    let mut cmd = std::process::Command::new(&cleanup_script);
+    cmd.arg(&window_ids);
+    for s in state.roles.iter() {
+        cmd.arg(&s.session);
+    }
+    cmd.output().ok();
+    axum::http::StatusCode::OK
+}
+
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
     let sessions_path = args.working_dir.join(".swarmforge/sessions.tsv");
     let roles = Arc::new(sessions::parse(&sessions_path));
 
+    // swarm-cleanup.sh lives alongside swarmforge.sh, three levels up from the binary
+    // (<repo>/swarmforge-ui/target/release/swarmforge-ui → <repo>/)
+    let script_dir = std::env::current_exe().ok()
+        .and_then(|p| p.parent().and_then(|p| p.parent()).and_then(|p| p.parent()).map(|p| p.to_path_buf()))
+        .unwrap_or_else(|| args.working_dir.clone());
+
     println!("SwarmForge UI — {} agent(s) — http://localhost:{}", roles.len(), args.port);
 
-    let state = AppState { roles, working_dir: args.working_dir };
+    let state = AppState { roles, working_dir: args.working_dir, script_dir };
     let app = Router::new()
         .route("/", get(index_handler))
         .route("/events", get(sse_handler))
         .route("/send/:role", post(send_handler))
+        .route("/cleanup", post(cleanup_handler))
         .with_state(state);
 
     let addr = format!("0.0.0.0:{}", args.port);

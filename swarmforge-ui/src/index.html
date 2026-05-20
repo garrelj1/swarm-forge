@@ -9,7 +9,10 @@
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: #1a1a1a; color: #ccc; font-family: monospace; display: flex; flex-direction: column; height: 100vh; }
-  header { padding: 8px 16px; background: #111; border-bottom: 1px solid #333; font-size: 14px; }
+  header { padding: 8px 16px; background: #111; border-bottom: 1px solid #333; font-size: 14px; display: flex; align-items: center; justify-content: space-between; }
+  #stop-btn { background: #5a1a1a; border: 1px solid #a33; color: #f88; padding: 4px 12px; cursor: pointer; border-radius: 3px; font-size: 12px; font-family: monospace; }
+  #stop-btn:hover { background: #7a2a2a; }
+  #stop-btn.confirm { background: #a33; color: #fff; }
   #layout { display: flex; flex: 1; overflow: hidden; }
   #agents { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; flex: 1; padding: 4px; overflow: hidden; min-width: 0; }
   .agent-panel { display: flex; flex-direction: column; background: #111; border: 1px solid #333; border-radius: 4px; overflow: hidden; min-height: 0; }
@@ -32,7 +35,10 @@
 </style>
 </head>
 <body>
-<header>SwarmForge</header>
+<header>
+  <span>SwarmForge</span>
+  <button id="stop-btn">Stop Swarm</button>
+</header>
 <div id="layout">
   <div id="agents"></div>
   <div id="sidebar-divider"></div>
@@ -43,6 +49,26 @@
 </div>
 <script>
 const terminals = {};
+
+// Two-click stop: first click arms, second fires, clicking away disarms
+const stopBtn = document.getElementById('stop-btn');
+let stopArmed = false;
+stopBtn.addEventListener('click', () => {
+  if (!stopArmed) {
+    stopArmed = true;
+    stopBtn.classList.add('confirm');
+    stopBtn.textContent = 'Confirm Stop';
+    setTimeout(() => {
+      stopArmed = false;
+      stopBtn.classList.remove('confirm');
+      stopBtn.textContent = 'Stop Swarm';
+    }, 3000);
+  } else {
+    fetch('/cleanup', { method: 'POST' });
+    stopBtn.textContent = 'Stopping…';
+    stopBtn.disabled = true;
+  }
+});
 
 function createPanel(role) {
   const panel = document.createElement('div');
