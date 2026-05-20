@@ -62,15 +62,19 @@ async fn sse_handler(
         });
     }
 
-    // Tail message log
+    // Tail message log — map session names back to role names
     {
         let log = state.working_dir.join("logs/agent_messages.log");
+        let session_map: std::collections::HashMap<String, String> = state.roles.iter()
+            .map(|s| (s.session.clone(), s.role.clone()))
+            .collect();
         let tx2 = tx.clone();
         tokio::spawn(async move {
             let (ltx, mut lrx) = mpsc::channel(256);
             tokio::spawn(tailer::tail(log, ltx));
             while let Some(line) = lrx.recv().await {
-                if let Some((role, text)) = events::parse_message_line(&line) {
+                if let Some((session, text)) = events::parse_message_line(&line) {
+                    let role = session_map.get(&session).cloned().unwrap_or(session);
                     if tx2.send(events::Payload::Message { role, text }).await.is_err() { break; }
                 }
             }
@@ -154,15 +158,14 @@ mod events {
         }
     }
 
+    // Returns (session_name, text). Caller maps session_name → role.
     pub fn parse_message_line(line: &str) -> Option<(String, String)> {
-        // Format: [timestamp] [swarmforge-role] message text
         let after_ts = line.find("] [")?;
         let rest = &line[after_ts + 3..];
         let session_end = rest.find(']')?;
-        let session = &rest[..session_end];
+        let session = rest[..session_end].to_string();
         let text = rest[session_end + 2..].trim().to_string();
-        let role = session.strip_prefix("swarmforge-").unwrap_or(session).to_string();
-        Some((role, text))
+        Some((session, text))
     }
 
     #[cfg(test)]
@@ -191,10 +194,10 @@ mod events {
 
         #[test]
         fn parses_message_log_line() {
-            let line = "[2026-05-19 12:00:00] [swarmforge-coder] done, branch xyz";
+            let line = "[2026-05-19 12:00:00] [swarmforge-myproject-coder] done, branch xyz";
             assert_eq!(
                 parse_message_line(line),
-                Some(("coder".to_string(), "done, branch xyz".to_string()))
+                Some(("swarmforge-myproject-coder".to_string(), "done, branch xyz".to_string()))
             );
         }
 
