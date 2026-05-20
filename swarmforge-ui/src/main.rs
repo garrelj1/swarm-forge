@@ -141,10 +141,10 @@ async fn main() {
     let sessions_path = args.working_dir.join(".swarmforge/sessions.tsv");
     let roles = Arc::new(sessions::parse(&sessions_path));
 
-    // swarm-cleanup.sh lives alongside swarmforge.sh, three levels up from the binary
-    // (<repo>/swarmforge-ui/target/release/swarmforge-ui → <repo>/)
+    // swarm-cleanup.sh lives alongside swarmforge.sh, four levels up from the binary
+    // (<repo>/swarmforge-ui/target/{debug,release}/swarmforge-ui → <repo>/)
     let script_dir = std::env::current_exe().ok()
-        .and_then(|p| p.parent().and_then(|p| p.parent()).and_then(|p| p.parent()).map(|p| p.to_path_buf()))
+        .and_then(|p| p.parent().and_then(|p| p.parent()).and_then(|p| p.parent()).and_then(|p| p.parent()).map(|p| p.to_path_buf()))
         .unwrap_or_else(|| args.working_dir.clone());
 
     println!("SwarmForge UI — {} agent(s) — http://localhost:{}", roles.len(), args.port);
