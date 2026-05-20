@@ -135,7 +135,48 @@ Use these example directories as starting points for project-local `swarmforge/`
   ```sh
   curl -L https://github.com/unclebob/swarm-forge/archive/refs/heads/main.tar.gz | tar -xz --strip-components=1
   ```
-	
+
+- Edit `swarmforge/stack.prompt` to describe your project's toolchain. This is the only file that changes between projects — agents read it at startup to know what languages, commands, and quality tools to use.
+
+  ```
+  # Stack
+
+  ## Languages
+  - Backend:  Rust (Cargo)
+
+  ## Commands
+
+  ### Build
+  - Backend:  cargo build
+
+  ### Test
+  - Backend:  cargo test
+
+  ### Type Check / Lint
+  - Backend:  cargo clippy -- -D warnings
+
+  ### Format
+  - Backend:  cargo fmt
+
+  ## Quality Tools (install if missing)
+
+  - Coverage:  cargo-tarpaulin
+    Install:   cargo install cargo-tarpaulin
+    Run:       cargo tarpaulin --out Stdout
+
+  - Mutation:  cargo-mutants
+    Install:   cargo install cargo-mutants
+    Run:       cargo mutants -j 4
+
+  ## Quality Thresholds
+  - Lint:      zero warnings
+  - Tests:     all pass
+  - Coverage:  80%+
+  - Mutation:  90%+ survivors killed
+  ```
+
+  Remove any sections that don't apply to your project (e.g. delete the Frontend block for a backend-only project).
+
 ## Running SwarmForge
 
 Just type `swarm`. The windows should all pop up.
