@@ -23,3 +23,7 @@ test('5 agents = 3 cols, 2 rows', () => {
 test('6 agents = 3 cols, 2 rows', () => {
   expect(computeGrid(6)).toEqual({ cols: 3, rows: 2 });
 });
+
+test('0 agents = 0 cols, 0 rows', () => {
+  expect(computeGrid(0)).toEqual({ cols: 0, rows: 0 });
+});
