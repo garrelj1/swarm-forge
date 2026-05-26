@@ -1,4 +1,7 @@
 const { computeGrid } = require('../lib/grid');
+const { Terminal } = require('xterm');
+const { FitAddon } = require('@xterm/addon-fit');
+const { WebLinksAddon } = require('@xterm/addon-web-links');
 
 function buildLayout(sessions) {
   const n = sessions.length;
@@ -43,11 +46,14 @@ function buildLayout(sessions) {
     termDivs.push({ role: s.role, el: termDiv });
   });
 
+  const refitAll = () => terminals.forEach(({ fitAddon }) => fitAddon.fit());
+
   if (columnEls.length > 1) {
     Split(columnEls, {
       direction: 'horizontal',
       sizes: columnEls.map(() => 100 / cols),
       gutterSize: 4,
+      onDragEnd: refitAll,
     });
   }
 
@@ -58,6 +64,7 @@ function buildLayout(sessions) {
         direction: 'vertical',
         sizes: panels.map(() => 100 / panels.length),
         gutterSize: 4,
+        onDragEnd: refitAll,
       });
     }
   });
@@ -75,12 +82,12 @@ function attachTerminals(termDivs) {
       fontSize: 13,
       cursorBlink: true,
     });
-    const fitAddon = new FitAddon.FitAddon();
-    const webLinksAddon = new WebLinksAddon.WebLinksAddon();
+    const fitAddon = new FitAddon();
+    const webLinksAddon = new WebLinksAddon();
     term.loadAddon(fitAddon);
     term.loadAddon(webLinksAddon);
     term.open(el);
-    fitAddon.fit();
+    requestAnimationFrame(() => fitAddon.fit());
     terminals.set(role, { term, fitAddon });
 
     term.write(`\x1b[32m[${role}]\x1b[0m connecting...\r\n`);
