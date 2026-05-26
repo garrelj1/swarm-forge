@@ -5,12 +5,20 @@
   <title>SwarmForge</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #1e1e1e; color: #ccc; font-family: monospace; height: 100vh; display: flex; flex-direction: column; }
+    body { background: #1e1e1e; color: #ccc; font-family: monospace; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
     #container { flex: 1; display: flex; overflow: hidden; }
+    .column { display: flex; flex-direction: column; overflow: hidden; }
+    .panel { display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+    .panel-label { background: #2d2d2d; color: #888; font-size: 11px; padding: 2px 8px; flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.05em; }
+    .panel-term { flex: 1; overflow: hidden; }
+    .gutter { background: #333; }
+    .gutter-horizontal { cursor: col-resize; width: 4px; }
+    .gutter-vertical { cursor: row-resize; height: 4px; }
   </style>
 </head>
 <body>
   <div id="container"></div>
+  <script src="../node_modules/split.js/dist/split.min.js"></script>
   <script src="index.js"></script>
 </body>
 </html>
