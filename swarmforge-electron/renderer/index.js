@@ -65,11 +65,38 @@ function buildLayout(sessions) {
   return termDivs;
 }
 
-// Temporary: render mock sessions so the layout is visible without a live swarm
+const terminals = new Map(); // role → { term, fitAddon }
+
+function attachTerminals(termDivs) {
+  termDivs.forEach(({ role, el }) => {
+    const term = new Terminal({
+      theme: { background: '#1e1e1e', foreground: '#cccccc', cursor: '#cccccc' },
+      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+      fontSize: 13,
+      cursorBlink: true,
+    });
+    const fitAddon = new FitAddon.FitAddon();
+    const webLinksAddon = new WebLinksAddon.WebLinksAddon();
+    term.loadAddon(fitAddon);
+    term.loadAddon(webLinksAddon);
+    term.open(el);
+    fitAddon.fit();
+    terminals.set(role, { term, fitAddon });
+
+    term.write(`\x1b[32m[${role}]\x1b[0m connecting...\r\n`);
+  });
+}
+
+window.addEventListener('resize', () => {
+  terminals.forEach(({ fitAddon }) => fitAddon.fit());
+});
+
+// Temporary mock — replaced by IPC in Task 7
 const mockSessions = [
   { role: 'specifier' },
   { role: 'coder' },
   { role: 'refactorer' },
   { role: 'architect' },
 ];
-buildLayout(mockSessions);
+const termDivs = buildLayout(mockSessions);
+attachTerminals(termDivs);
