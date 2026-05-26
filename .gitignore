@@ -7,3 +7,4 @@ docs/plans/
 swarmtools/
 logs/
 agent_context/
+node_modules/
