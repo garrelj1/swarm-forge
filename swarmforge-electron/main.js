@@ -1,7 +1,9 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 
-function createWindow(workingDir) {
+let workingDir = process.cwd();
+
+function createWindow() {
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -17,8 +19,8 @@ function createWindow(workingDir) {
 app.whenReady().then(() => {
   const args = process.argv.slice(2);
   const wdIdx = args.indexOf('--working-dir');
-  const workingDir = wdIdx !== -1 ? args[wdIdx + 1] : process.cwd();
-  createWindow(workingDir);
+  if (wdIdx !== -1) workingDir = args[wdIdx + 1];
+  createWindow();
 });
 
 app.on('window-all-closed', () => app.quit());
