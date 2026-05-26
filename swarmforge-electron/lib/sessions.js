@@ -10,8 +10,9 @@ function parseSessions(tsvPath) {
         if (cols.length < 3) return [];
         return [{ role: cols[1], session: cols[2] }];
       });
-  } catch {
-    return [];
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw err;
   }
 }
 
