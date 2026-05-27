@@ -48,8 +48,13 @@ FRAMEWORK_FILES=(
   swarmforge/constitution.prompt
   swarmforge/constitution/engineering.prompt
   swarmforge/constitution/workflow.prompt
-  swarmforge-ui/Cargo.toml
-  swarmforge-ui/Cargo.lock
+  swarmforge-electron/package.json
+  swarmforge-electron/main.js
+  swarmforge-electron/preload.js
+  swarmforge-electron/renderer/index.html
+  swarmforge-electron/renderer/index.js
+  swarmforge-electron/lib/sessions.js
+  swarmforge-electron/lib/grid.js
 )
 
 # Updated only with --include-role-prompts
@@ -115,13 +120,13 @@ for file in "${FILES_TO_UPDATE[@]}"; do
   (( CHANGED++ )) || true
 done
 
-# Sync swarmforge-ui/src/ tree (skip target/ which is the build cache)
-UI_SRC_UPSTREAM="$TMPDIR_WORK/swarmforge-ui/src"
-UI_SRC_LOCAL="$WORKING_DIR/swarmforge-ui/src"
-if [[ -d "$UI_SRC_UPSTREAM" ]]; then
+# Sync swarmforge-electron/ lib and renderer trees (skip node_modules and tests)
+SF_ELECTRON_UPSTREAM="$TMPDIR_WORK/swarmforge-electron"
+SF_ELECTRON_LOCAL="$WORKING_DIR/swarmforge-electron"
+if [[ -d "$SF_ELECTRON_UPSTREAM" ]]; then
   while IFS= read -r -d '' src; do
-    rel="${src#$UI_SRC_UPSTREAM/}"
-    dst="$UI_SRC_LOCAL/$rel"
+    rel="${src#$SF_ELECTRON_UPSTREAM/}"
+    dst="$SF_ELECTRON_LOCAL/$rel"
 
     if [[ -f "$dst" ]] && diff -q "$src" "$dst" > /dev/null 2>&1; then
       (( ALREADY_CURRENT++ )) || true
@@ -130,18 +135,18 @@ if [[ -d "$UI_SRC_UPSTREAM" ]]; then
 
     if [[ "$DRY_RUN" == true ]]; then
       if [[ -f "$dst" ]]; then
-        echo -e "${CYAN}  would update: swarmforge-ui/src/$rel${RESET}"
+        echo -e "${CYAN}  would update: swarmforge-electron/$rel${RESET}"
         diff "$dst" "$src" || true
       else
-        echo -e "${GREEN}  would add: swarmforge-ui/src/$rel${RESET}"
+        echo -e "${GREEN}  would add: swarmforge-electron/$rel${RESET}"
       fi
     else
       mkdir -p "$(dirname "$dst")"
       cp "$src" "$dst"
-      echo -e "${GREEN}  updated: swarmforge-ui/src/$rel${RESET}"
+      echo -e "${GREEN}  updated: swarmforge-electron/$rel${RESET}"
     fi
     (( CHANGED++ )) || true
-  done < <(find "$UI_SRC_UPSTREAM" -type f -print0)
+  done < <(find "$SF_ELECTRON_UPSTREAM" -not -path "*/node_modules/*" -not -path "*/tests/*" -type f -print0)
 fi
 
 echo ""
