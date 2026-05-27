@@ -25,7 +25,7 @@ WINDOW_STATE_FILE="$STATE_DIR/windows.tsv"
 WINDOW_WATCHDOG_LOG="$STATE_DIR/window-watchdog.log"
 SESSIONS_FILE="$STATE_DIR/sessions.tsv"
 PROMPTS_DIR="$STATE_DIR/prompts"
-TMUX_SOCKET_DIR="/private/tmp/swarmforge-${UID}"
+TMUX_SOCKET_DIR="${TMPDIR:-/tmp}/swarmforge-${UID}"
 PROJECT_SOCKET_ID="$(printf '%s' "$WORKING_DIR" | cksum)"
 PROJECT_SOCKET_ID="${PROJECT_SOCKET_ID%% *}"
 TMUX_SOCKET="$TMUX_SOCKET_DIR/$PROJECT_SOCKET_ID.sock"
@@ -91,7 +91,7 @@ ensure_runtime_git_excludes() {
   touch "$exclude_file"
 
   local pattern
-  for pattern in ".swarmforge/" ".worktrees/" "swarmtools/" "logs/" "agent_context/"; do
+  for pattern in ".swarmforge/" ".worktrees/" "swarmtools/" "logs/" "agent_context/" "CLAUDE.md"; do
     if ! grep -qx "$pattern" "$exclude_file"; then
       echo "$pattern" >> "$exclude_file"
     fi
@@ -374,6 +374,16 @@ prepare_worktrees() {
     fi
 
     write_worktree_notify_wrapper "$worktree_path"
+
+    local exclude_file
+    exclude_file="$(git -C "$worktree_path" rev-parse --git-path info/exclude 2>/dev/null)"
+    if [[ -n "$exclude_file" ]]; then
+      mkdir -p "${exclude_file:h}"
+      touch "$exclude_file"
+      if ! grep -qx "CLAUDE.md" "$exclude_file"; then
+        echo "CLAUDE.md" >> "$exclude_file"
+      fi
+    fi
   done
 }
 
@@ -406,6 +416,26 @@ Read swarmforge/${role}.prompt, then read every file it refers to recursively, a
 EOF
 }
 
+write_agent_claude_md() {
+  local role="$1"
+  local worktree_path="$2"
+  local claude_md="$worktree_path/CLAUDE.md"
+  local sf_dir="$worktree_path/swarmforge"
+
+  {
+    printf '# SwarmForge Constitution\n\n'
+    cat "$sf_dir/constitution/project.prompt" 2>/dev/null
+    printf '\n'
+    cat "$sf_dir/stack.prompt" 2>/dev/null
+    printf '\n'
+    cat "$sf_dir/constitution/engineering.prompt" 2>/dev/null
+    printf '\n'
+    cat "$sf_dir/constitution/workflow.prompt" 2>/dev/null
+    printf '\n# Your Role\n\n'
+    cat "$sf_dir/${role}.prompt" 2>/dev/null
+  } > "$claude_md"
+}
+
 launch_role() {
   local index="$1"
   local role="${ROLES[$index]}"
@@ -417,6 +447,7 @@ launch_role() {
   local launch_cmd=""
 
   write_agent_instruction_file "$role" "$prompt_file"
+  write_agent_claude_md "$role" "$role_worktree"
 
   case "$agent" in
     claude)
@@ -499,20 +530,14 @@ for (( i = 1; i <= ${#ROLES[@]}; i++ )); do
 done
 
 echo ""
-UI_SOURCE="$SCRIPT_DIR/swarmforge-ui"
-UI_BINARY="$UI_SOURCE/target/release/swarmforge-ui"
-if [[ -d "$UI_SOURCE" ]] && has_command cargo; then
-  if [[ ! -x "$UI_BINARY" ]] || [[ "$UI_SOURCE/src/main.rs" -nt "$UI_BINARY" ]]; then
-    echo -e "${CYAN}Building SwarmForge UI...${RESET}"
-    (cd "$UI_SOURCE" && cargo build --release --quiet)
-  fi
-fi
-if [[ -x "$UI_BINARY" ]]; then
-  "$UI_BINARY" --port 7777 --working-dir "$WORKING_DIR" &
-  echo -e "${GREEN}SwarmForge UI: http://localhost:7777${RESET}"
-  if has_command osascript; then
-    open "http://localhost:7777"
-  fi
+ELECTRON_APP="$SCRIPT_DIR/swarmforge-electron"
+if [[ -d "$ELECTRON_APP" ]] && has_command npx; then
+  (cd "$ELECTRON_APP" && npx --yes electron . --working-dir "$WORKING_DIR") &
+  echo -e "${GREEN}SwarmForge UI launched.${RESET}"
+elif ! has_command npx; then
+  echo -e "${YELLOW}npx not found — skipping UI (install Node.js to enable).${RESET}"
+else
+  echo -e "${YELLOW}swarmforge-electron not found — skipping UI.${RESET}"
 fi
 echo -e "${GREEN}${BOLD}SwarmForge is ready.${RESET}"
 echo -e "Working directory: ${WORKING_DIR}"

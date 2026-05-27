@@ -1,8 +1,9 @@
 # Product Specification: SwarmForge
 
-**Version:** 1.0  
-**Author:** Justin Martin  
-**Status:** Approved for MVP Development  
+**Version:** 1.1  
+**Original Author:** Justin Martin  
+**Fork Maintainer:** Jeremy Garrell  
+**Status:** Active Development  
 
 ## 1. Product Overview
 
@@ -22,6 +23,8 @@ SwarmForge turns raw AI coding speed into **reliable, scalable, maintainable eng
 - Dogfood the platform by using the swarm to extend and improve SwarmForge itself.
 - Create a foundational layer that can scale from local tmux sessions to distributed cloud swarms and a full Electron GUI.
 - Educate the community on TDD, E2E Gherkin, mutation testing, complexity control, and linting in the age of AI agents.
+- Eliminate manual tmux session management through a purpose-built GUI, making the swarm observable and controllable without touching a terminal.
+- Keep the framework generic and reusable across any project — project-specific configuration lives separately from the framework so any project can adopt SwarmForge and receive upstream updates without losing its local setup.
 
 ## 3. Target Users
 
@@ -36,6 +39,7 @@ SwarmForge turns raw AI coding speed into **reliable, scalable, maintainable eng
 | Feature | Description | MVP Status |
 |---------|-------------|------------|
 | **Constitution Engine** | Central `Constitution.md` file that every agent reads at startup. Defines 5 non-negotiable rules. | Yes |
+| **Configurable Swarm Topology** | Swarm shape (roles, agents, worktrees) defined per project in `swarmforge/swarmforge.conf`. No hardcoded roles — each project composes its own swarm. | Yes |
 | **Agent Swarm Orchestration** | Spawns and coordinates multiple specialized agents (Architect, Coder, TDD Guardian, E2E Interpreter, Mutation Hunter, Complexity Enforcer, Linter Guardian) in named tmux panes. | Yes |
 | **Real-Time Collaboration** | Agents communicate via shared filesystem, tmux pane output, and structured log files. Human can observe and intervene in any pane. | Yes |
 | **TDD Enforcement (Rule 1)** | Agents must follow Red → Green → Refactor cycle. Production code forbidden until failing test exists. | Yes |
@@ -44,7 +48,7 @@ SwarmForge turns raw AI coding speed into **reliable, scalable, maintainable eng
 | **Cyclomatic Complexity + CRAP Enforcement (Rule 4)** | Complexity Enforcer rejects any method >4 complexity or CRAP ≥30 and forces refactor. | Yes |
 | **Linter Guardian (Rule 5)** | Runs language-specific linter with zero-tolerance policy. Auto-fixes safe issues. | Yes |
 | **Pre-Commit / Pre-Merge Hooks** | Automatic validation pipeline that blocks any commit violating the Constitution. | Yes |
-| **Live Metrics Dashboard** | Real-time display (in tmux) of test coverage, mutation score, complexity metrics, and Gherkin status. | Yes |
+| **Live Metrics Dashboard** | Real-time display of test coverage, mutation score, complexity metrics, and Gherkin status. Surfaced through the GUI; tmux panes remain available for direct observation. | Yes |
 | **Self-Dogfooding** | SwarmForge uses its own swarm to implement new features in SwarmForge. | Yes |
 | **Task Submission** | Users submit work via main Architect pane or by adding a new Gherkin `.feature` file. | Yes |
 
@@ -67,7 +71,7 @@ SwarmForge turns raw AI coding speed into **reliable, scalable, maintainable eng
    Every agent action triggers the full validation pipeline. Any violation halts progress and explains the exact rule broken.
 
 5. **Human Oversight**  
-   User watches live reasoning and code generation in real time. Can approve, reject, or give clarification in any pane.
+   User watches live reasoning and code generation in real time via the GUI or directly in tmux. Can approve, reject, or give clarification at any point.
 
 6. **Completion**  
    Only when all five rules are satisfied does the swarm mark the task complete and commit the changes.
@@ -82,6 +86,7 @@ The entire process is observable, auditable, and repeatable.
 - **Languages Supported:** Language-agnostic (MVP focused on Go/TypeScript; extensible via config).
 - **Storage:** All code, tests, Gherkin files, and logs live in the project repo.
 - **Extensibility Points:** Plugin system for new agent roles, additional languages, and future distributed mode.
+- **Framework/Project Boundary:** Framework files (`swarmforge.sh`, shell scripts, `constitution/engineering.prompt`, `constitution/workflow.prompt`) are generic and updatable from upstream. Project-specific configuration (`swarmforge.conf`, `constitution/project.prompt`, `stack.prompt`) lives alongside but is never overwritten by framework updates. This separation allows any project to adopt SwarmForge and stay current with upstream improvements.
 
 ## 7. Non-Functional Requirements
 
@@ -90,6 +95,7 @@ The entire process is observable, auditable, and repeatable.
 - **Reliability:** Swarm must never produce code that violates the Constitution.
 - **Security:** Runs locally; no external data exfiltration unless explicitly configured.
 - **Usability:** Minimal setup — clone, run script, start coding.
+- **Updateability:** Framework updates must be receivable from upstream without disrupting project-specific configuration. Project files (`swarmforge.conf`, `constitution/project.prompt`, `stack.prompt`) are never overwritten by a framework update.
 
 ## 8. Future Roadmap (Post-MVP)
 
@@ -116,7 +122,8 @@ The entire process is observable, auditable, and repeatable.
 
 ---
 
-**Approved by:** Justin Martin  
-**Next Review:** After MVP core is live and self-dogfooded.
+**Originally approved by:** Justin Martin  
+**Fork maintained by:** Jeremy Garrell  
+**Next Review:** After Electron GUI reaches MVP.
 
 This Product Specification serves as the single source of truth for all SwarmForge development. Every feature added must comply with the Constitution.md and this spec.
