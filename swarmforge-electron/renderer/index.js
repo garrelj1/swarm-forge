@@ -87,7 +87,11 @@ function attachTerminals(termDivs) {
     term.loadAddon(fitAddon);
     term.loadAddon(webLinksAddon);
     term.open(el);
-    requestAnimationFrame(() => fitAddon.fit());
+    term.onData(data => window.swarm.writePty(role, data));
+    requestAnimationFrame(() => {
+      fitAddon.fit();
+      window.swarm.resizePty(role, term.cols, term.rows);
+    });
     terminals.set(role, { term, fitAddon });
 
     term.write(`\x1b[32m[${role}]\x1b[0m connecting...\r\n`);
@@ -98,12 +102,13 @@ window.addEventListener('resize', () => {
   terminals.forEach(({ fitAddon }) => fitAddon.fit());
 });
 
-// Temporary mock — replaced by IPC in Task 7
-const mockSessions = [
-  { role: 'specifier' },
-  { role: 'coder' },
-  { role: 'refactorer' },
-  { role: 'architect' },
-];
-const termDivs = buildLayout(mockSessions);
-attachTerminals(termDivs);
+// Receive session list from main process, build layout and attach terminals
+window.swarm.onSessions(sessions => {
+  const termDivs = buildLayout(sessions);
+  attachTerminals(termDivs);
+});
+
+// Route pty output to the correct terminal
+window.swarm.onPtyData(({ role, data }) => {
+  terminals.get(role)?.term.write(data);
+});
