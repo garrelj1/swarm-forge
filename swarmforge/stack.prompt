@@ -24,16 +24,44 @@
 
 ## Quality Tools (install if missing)
 
-- Coverage:  <tool name>
-  Install:   <install command>
-  Run:       <run command>
+Each analyzer below MUST conform to the Analyzer Contract in
+constitution/engineering.prompt: accepts a path, emits a single JSON
+document to stdout (`tool`, `metric`, `threshold`, `violations`,
+optional `summary`), exits 0 on pass and non-zero on any violation.
 
-- Mutation:  <tool name>
-  Install:   <install command>
-  Run:       <run command, e.g. cargo mutants -j 4>
+- Coverage:    <tool name>
+  Install:     <install command>
+  Run:         <run command>
 
-## Quality Thresholds
-- Lint:      zero warnings
-- Tests:     all pass
-- Coverage:  80%+
-- Mutation:  90%+ survivors killed
+- Mutation:    <tool name, e.g. cargo-mutants / mutate4go / Stryker>
+  Install:     <install command>
+  Run:         <command emitting Analyzer Contract JSON with metric=mutation>
+  Threshold:   90  # minimum kill rate (%)
+
+- Complexity:  <tool name, e.g. gocyclo / radon cc / PMD>
+  Install:     <install command>
+  Run:         <command emitting Analyzer Contract JSON with metric=complexity>
+  Threshold:   4   # max cyclomatic complexity per method
+
+- CRAP:        <tool name, e.g. crap4go / custom plugin>
+  Install:     <install command>
+  Run:         <command emitting Analyzer Contract JSON with metric=crap>
+  Threshold:   30  # exclusive upper bound per method
+
+- DRY:         <tool name, e.g. dry4go / jscpd / leave blank to skip>
+  Install:     <install command>
+  Run:         <command emitting Analyzer Contract JSON with metric=dry>
+  Threshold:   <project-specific; omit if DRY not enforced here>
+
+- Lint:        <tool name, e.g. clippy / eslint / ruff>
+  Install:     <install command>
+  Run:         <command emitting Analyzer Contract JSON with metric=lint>
+  Threshold:   0   # zero warnings, zero errors
+
+## Quality Thresholds (Constitution-owned, mirrored for reference)
+- Lint:        zero warnings, zero errors
+- Tests:       all pass
+- Coverage:    80%+
+- Mutation:    ≥ 90% mutants killed
+- Complexity:  ≤ 4 per method
+- CRAP:        < 30 per method

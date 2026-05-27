@@ -1,22 +1,39 @@
 # Engineering Rules
 
-- On startup, acquire the github tools for the project language and get them ready to run.
-- Language tool table:
-  - Go: install with `go install`; mutation `github.com/unclebob/mutate4go`, CRAP `github.com/unclebob/crap4go`, DRY `github.com/unclebob/dry4go`.
-  - Clojure: install with Clojure CLI/deps.edn; mutation `github.com/unclebob/clj-mutate`, CRAP `github.com/unclebob/crap4clj`, DRY `github.com/unclebob/dry4clj`.
-  - Java: install with Maven (`mvn`); mutation `github.com/unclebob/mutate4java`, CRAP `github.com/unclebob/crap4java`, DRY `github.com/unclebob/dry4java`.
+- On startup, acquire the analyzers declared in stack.prompt for the project language and get them ready to run.
+- Constitutional thresholds (non-negotiable):
+  - Cyclomatic complexity: every method ≤ 4.
+  - CRAP score: every method < 30.
+  - Mutation kill rate: ≥ 90% of generated mutants killed.
+  - Lint: zero warnings, zero errors.
+  - DRY: project-declared threshold (see stack.prompt); if declared, violations block the change.
+- Any violation of a threshold blocks the change and requires refactor before proceeding.
+- The Constitution owns the thresholds. The project owns the tool choice. Specific analyzers are declared per language in stack.prompt; any tool that conforms to the Analyzer Contract below is acceptable. Uncle Bob's `crap4*`, `mutate4*`, and `dry4*` tools are reference implementations, not requirements.
+
+## Analyzer Contract
+An analyzer (complexity, CRAP, mutation, DRY, lint) is conformant if it:
+  1. Accepts a file, directory, or package path as input.
+  2. Writes a single JSON document to stdout. The document MUST contain:
+     - `tool`: string identifier of the analyzer.
+     - `metric`: one of `complexity`, `crap`, `mutation`, `dry`, `lint`.
+     - `threshold`: the numeric or boolean threshold applied for this run.
+     - `violations`: array of `{ location, identifier, value, message }` objects, one per offending method/file/finding. Empty array means pass.
+     - `summary`: optional aggregate fields (e.g. `kill_rate`, `total_methods`).
+  3. Exits 0 when `violations` is empty; non-zero when any violation is present.
+  4. Emits periodic progress to stderr on long runs so agents can distinguish work from a hang.
 - Work in small, reviewable increments.
 - Prefer the simplest design that supports the current behavior and leaves clear options for the next step.
 - Keep tests close to the behavior being changed.
 - Separate testable modules from environmentally unsuitable modules that open GUIs, depend on external devices, throw environment errors, emit system errors, or hang under automated tests. Maximize testable code and minimize the unsuitable boundary.
 - Only testable modules should participate in tools that run tests, including unit tests, acceptance tests, coverage, mutation testing, CRAP analysis, DRY analysis that invokes tests, and property tests.
 - Keep property tests separate from normal verification. Do not include property-test tags in normal unit coverage, Gherkin acceptance mutation, language mutation tools, CRAP, or coverage commands unless the role owns property-test verification or the user explicitly asks for property tests.
+- Gherkin acceptance testing is optional. The Gherkin-tagged rules below apply only when the project declares Gherkin acceptance support in stack.prompt; otherwise skip them.
 - Use github.com/unclebob/Acceptance-Pipeline-Specification for Gherkin acceptance tests.
 - Gherkin acceptance mutation means using the Acceptance Pipeline mutator to mutate Gherkin example values.
 - Gherkin acceptance mutation runs must report periodic progress/status so agents can distinguish normal long-running work from a hang.
 - Before running language, build, or test commands, prefer project-local cache/configuration paths inside the assigned worktree. Avoid default cache locations that write outside the project and may trigger sandbox or permission restrictions.
-- Run acceptance generation and acceptance tests sequentially.
-- Avoid running whole-suite language test commands concurrently with acceptance generation.
+- Run Gherkin acceptance generation and Gherkin acceptance tests sequentially.
+- Avoid running whole-suite language test commands concurrently with Gherkin acceptance generation.
 - Run the relevant local verification command before handoff whenever the project has one.
 - Do not edit mutation testing or Gherkin acceptance mutation manifests by hand; allow approved mutation tools to update those manifests as part of their normal runs.
 - Do not commit unrelated local changes or generated artifacts unless required for the task.
