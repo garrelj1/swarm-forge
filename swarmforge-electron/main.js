@@ -35,9 +35,16 @@ function createWindow() {
 
     send('swarm:sessions', sessions);
 
+    const socketFile = path.join(workingDir, '.swarmforge', 'tmux-socket');
+    let tmuxSocket = null;
+    try { tmuxSocket = fs.readFileSync(socketFile, 'utf8').trim(); } catch {}
+
     sessions.forEach(({ role, session }) => {
       try {
-        const p = pty.spawn('tmux', ['attach-session', '-t', session], {
+        const tmuxArgs = tmuxSocket
+          ? ['-S', tmuxSocket, 'attach-session', '-t', session]
+          : ['attach-session', '-t', session];
+        const p = pty.spawn('tmux', tmuxArgs, {
           name: 'xterm-256color',
           cols: 80,
           rows: 24,

@@ -46,7 +46,10 @@ function buildLayout(sessions) {
     termDivs.push({ role: s.role, el: termDiv });
   });
 
-  const refitAll = () => terminals.forEach(({ fitAddon }) => fitAddon.fit());
+  const refitAll = () => terminals.forEach(({ term, fitAddon }, role) => {
+    fitAddon.fit();
+    window.swarm.resizePty(role, term.cols, term.rows);
+  });
 
   if (columnEls.length > 1) {
     Split(columnEls, {
