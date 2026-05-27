@@ -48,13 +48,6 @@ FRAMEWORK_FILES=(
   swarmforge/constitution.prompt
   swarmforge/constitution/engineering.prompt
   swarmforge/constitution/workflow.prompt
-  swarmforge-electron/package.json
-  swarmforge-electron/main.js
-  swarmforge-electron/preload.js
-  swarmforge-electron/renderer/index.html
-  swarmforge-electron/renderer/index.js
-  swarmforge-electron/lib/sessions.js
-  swarmforge-electron/lib/grid.js
 )
 
 # Updated only with --include-role-prompts
@@ -143,6 +136,7 @@ if [[ -d "$SF_ELECTRON_UPSTREAM" ]]; then
     else
       mkdir -p "$(dirname "$dst")"
       cp "$src" "$dst"
+      [[ -x "$src" ]] && chmod +x "$dst"
       echo -e "${GREEN}  updated: swarmforge-electron/$rel${RESET}"
     fi
     (( CHANGED++ )) || true
