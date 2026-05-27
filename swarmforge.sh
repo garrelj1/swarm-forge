@@ -534,8 +534,10 @@ ELECTRON_APP="$SCRIPT_DIR/swarmforge-electron"
 if [[ -d "$ELECTRON_APP" ]] && has_command npx; then
   (cd "$ELECTRON_APP" && npx --yes electron . --working-dir "$WORKING_DIR") &
   echo -e "${GREEN}SwarmForge UI launched.${RESET}"
-else
+elif ! has_command npx; then
   echo -e "${YELLOW}npx not found — skipping UI (install Node.js to enable).${RESET}"
+else
+  echo -e "${YELLOW}swarmforge-electron not found — skipping UI.${RESET}"
 fi
 echo -e "${GREEN}${BOLD}SwarmForge is ready.${RESET}"
 echo -e "Working directory: ${WORKING_DIR}"
