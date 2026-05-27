@@ -1,11 +1,19 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
+const { execFile } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 const pty = require('node-pty');
 const { parseSessions } = require('./lib/sessions');
 
 let workingDir = process.cwd();
 let mainWindow = null;
 const ptys = new Map(); // role → pty instance
+
+function send(channel, payload) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(channel, payload);
+  }
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -25,21 +33,22 @@ function createWindow() {
     const tsvPath = path.join(workingDir, '.swarmforge', 'sessions.tsv');
     const sessions = parseSessions(tsvPath);
 
-    mainWindow.webContents.send('swarm:sessions', sessions);
+    send('swarm:sessions', sessions);
 
     sessions.forEach(({ role, session }) => {
-      const p = pty.spawn('tmux', ['attach-session', '-t', session], {
-        name: 'xterm-256color',
-        cols: 80,
-        rows: 24,
-        cwd: workingDir,
-      });
+      try {
+        const p = pty.spawn('tmux', ['attach-session', '-t', session], {
+          name: 'xterm-256color',
+          cols: 80,
+          rows: 24,
+          cwd: workingDir,
+        });
 
-      p.onData(data => {
-        if (mainWindow) mainWindow.webContents.send('pty:data', { role, data });
-      });
-
-      ptys.set(role, p);
+        p.onData(data => send('pty:data', { role, data }));
+        ptys.set(role, p);
+      } catch (err) {
+        send('pty:data', { role, data: `\x1b[31m[error] failed to attach to session "${session}": ${err.message}\x1b[0m\r\n` });
+      }
     });
   });
 }
@@ -53,16 +62,19 @@ ipcMain.on('pty:resize', (_, { role, cols, rows }) => {
 });
 
 ipcMain.on('swarm:cleanup', () => {
-  const { execFile } = require('child_process');
-  const cleanupScript = path.join(__dirname, '..', 'swarm-cleanup.sh');
+  const socketFile = path.join(workingDir, '.swarmforge', 'tmux-socket');
+  const tmuxSocket = fs.readFileSync(socketFile, 'utf8').trim();
   const windowIds = path.join(workingDir, '.swarmforge', 'window-ids');
-  execFile(cleanupScript, [windowIds, ...ptys.keys()], () => {});
+  const cleanupScript = path.join(__dirname, '..', 'swarm-cleanup.sh');
+  execFile(cleanupScript, [tmuxSocket, windowIds, ...ptys.keys()], err => {
+    if (err) console.error('swarm-cleanup.sh failed:', err.message);
+  });
 });
 
 app.whenReady().then(() => {
   const args = process.argv.slice(2);
   const wdIdx = args.indexOf('--working-dir');
-  if (wdIdx !== -1) workingDir = args[wdIdx + 1];
+  if (wdIdx !== -1 && args[wdIdx + 1]) workingDir = args[wdIdx + 1];
   createWindow();
 });
 
