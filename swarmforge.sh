@@ -25,10 +25,7 @@ WINDOW_STATE_FILE="$STATE_DIR/windows.tsv"
 WINDOW_WATCHDOG_LOG="$STATE_DIR/window-watchdog.log"
 SESSIONS_FILE="$STATE_DIR/sessions.tsv"
 PROMPTS_DIR="$STATE_DIR/prompts"
-TMUX_SOCKET_DIR="${TMPDIR:-/tmp}/swarmforge-${UID}"
-PROJECT_SOCKET_ID="$(printf '%s' "$WORKING_DIR" | cksum)"
-PROJECT_SOCKET_ID="${PROJECT_SOCKET_ID%% *}"
-TMUX_SOCKET="$TMUX_SOCKET_DIR/$PROJECT_SOCKET_ID.sock"
+TMUX_SOCKET="${SWARMFORGE_TMUX_SOCKET:-${TMUX_TMPDIR:-${TMPDIR:-/tmp}}/tmux-${UID}/default}"
 TMUX_SOCKET_FILE="$STATE_DIR/tmux-socket"
 
 typeset -a ROLES=()
@@ -335,7 +332,7 @@ EOF
 }
 
 prepare_workspace() {
-  mkdir -p "$WORKING_DIR/logs" "$WORKING_DIR/agent_context" "$STATE_DIR" "$PROMPTS_DIR" "$SWARM_TOOLS_DIR" "$WORKTREES_DIR" "$TMUX_SOCKET_DIR"
+  mkdir -p "$WORKING_DIR/logs" "$WORKING_DIR/agent_context" "$STATE_DIR" "$PROMPTS_DIR" "$SWARM_TOOLS_DIR" "$WORKTREES_DIR"
   printf '%s\n' "$TMUX_SOCKET" > "$TMUX_SOCKET_FILE"
   check_helper_scripts
   write_sessions_file
@@ -532,7 +529,7 @@ done
 echo ""
 ELECTRON_APP="$SCRIPT_DIR/swarmforge-electron"
 if [[ -d "$ELECTRON_APP" ]] && has_command npx; then
-  (cd "$ELECTRON_APP" && npx --yes electron . --working-dir "$WORKING_DIR") &
+  (cd "$ELECTRON_APP" && unset ELECTRON_RUN_AS_NODE && npx --yes electron . --working-dir "$WORKING_DIR") &
   echo -e "${GREEN}SwarmForge UI launched.${RESET}"
 elif ! has_command npx; then
   echo -e "${YELLOW}npx not found — skipping UI (install Node.js to enable).${RESET}"

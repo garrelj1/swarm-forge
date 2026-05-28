@@ -4,7 +4,7 @@
   "description": "SwarmForge desktop UI",
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
+    "start": "unset ELECTRON_RUN_AS_NODE; electron . --working-dir ..",
     "test": "jest"
   },
   "dependencies": {
