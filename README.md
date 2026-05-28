@@ -128,13 +128,24 @@ Use these example directories as starting points for project-local `swarmforge/`
 
 **Prerequisites:** tmux, git, and a Claude or Codex CLI. For the desktop UI (optional but recommended): [Node.js](https://nodejs.org) (provides `npx`).
 
-- In the directory where you want to use SwarmForge, pull the repository contents without creating a Git remote:
+- In the directory where you want to use SwarmForge, pull just the tool's files (this leaves your `.gitignore`, `README.md`, etc. untouched and skips repo-only files like `examples/` and `SwarmForgeInitSpec.md`):
 
   ```sh
-  curl -L https://github.com/garrelj1/swarm-forge/archive/refs/heads/main.tar.gz | tar -xz --strip-components=1
+  curl -L https://github.com/garrelj1/swarm-forge/archive/refs/heads/main.tar.gz \
+    | tar -xz --strip-components=1 \
+        swarm-forge-main/swarm \
+        swarm-forge-main/swarm-cleanup.sh \
+        swarm-forge-main/swarm-merge \
+        swarm-forge-main/swarm-merge.sh \
+        swarm-forge-main/swarm-window-watchdog.sh \
+        swarm-forge-main/swarmforge.sh \
+        swarm-forge-main/swarmlog.sh \
+        swarm-forge-main/update-swarmforge.sh \
+        swarm-forge-main/swarmforge \
+        swarm-forge-main/swarmforge-electron
   ```
 
-  This includes `swarmforge-electron/`, the desktop UI. `swarmforge.sh` launches it automatically on startup if `npx` is available.
+  This pulls the launcher and helpers, the `swarmforge/` config, and `swarmforge-electron/` (the desktop UI, launched automatically on startup if `npx` is available). SwarmForge tracks its own runtime directories via `.git/info/exclude` at startup, so it does not ship or overwrite a `.gitignore`.
 
 - Edit `swarmforge/stack.prompt` to describe your project's toolchain. This is the only file that changes between projects — agents read it at startup to know what languages, commands, and quality tools to use. You do **not** need to commit `swarmforge/`; the launcher mirrors it into each agent's worktree at startup.
 
