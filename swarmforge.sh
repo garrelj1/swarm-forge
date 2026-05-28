@@ -365,6 +365,10 @@ write_worktree_notify_wrapper() {
 }
 
 prepare_worktrees() {
+  # Drop registrations for worktrees whose directories were deleted, so a
+  # leftover branch isn't reported as "used by" a phantom worktree.
+  git -C "$WORKING_DIR" worktree prune 2>/dev/null || true
+
   local i worktree_name worktree_path branch_name
   for (( i = 1; i <= ${#ROLES[@]}; i++ )); do
     worktree_name="${WORKTREE_NAMES[$i]}"
