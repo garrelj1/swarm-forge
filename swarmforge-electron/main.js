@@ -2,12 +2,12 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const { execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const pty = require('node-pty');
 const { parseSessions } = require('./lib/sessions');
+const { ControlModeClient } = require('./lib/controlMode');
 
 let workingDir = process.cwd();
 let mainWindow = null;
-const ptys = new Map(); // role → pty instance
+const clients = new Map(); // role → ControlModeClient
 
 function send(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -40,32 +40,26 @@ function createWindow() {
     try { tmuxSocket = fs.readFileSync(socketFile, 'utf8').trim(); } catch {}
 
     sessions.forEach(({ role, session }) => {
-      try {
-        const tmuxArgs = tmuxSocket
-          ? ['-S', tmuxSocket, 'attach-session', '-t', session]
-          : ['attach-session', '-t', session];
-        const p = pty.spawn('tmux', tmuxArgs, {
-          name: 'xterm-256color',
-          cols: 80,
-          rows: 24,
-          cwd: workingDir,
-        });
+      const client = new ControlModeClient({ socket: tmuxSocket, session });
 
-        p.onData(data => send('pty:data', { role, data }));
-        ptys.set(role, p);
-      } catch (err) {
-        send('pty:data', { role, data: `\x1b[31m[error] failed to attach to session "${session}": ${err.message}\x1b[0m\r\n` });
-      }
+      client.on('output', (paneId, data) => send('pty:data', { role, data }));
+      client.on('exit', () => send('pty:data', { role, data: '\r\n\x1b[33m[session ended]\x1b[0m\r\n' }));
+
+      client.init().catch(err => {
+        send('pty:data', { role, data: `\x1b[31m[error] ${err.message}\x1b[0m\r\n` });
+      });
+
+      clients.set(role, client);
     });
   });
 }
 
 ipcMain.on('pty:write', (_, { role, data }) => {
-  ptys.get(role)?.write(data);
+  clients.get(role)?.writeInput(data);
 });
 
 ipcMain.on('pty:resize', (_, { role, cols, rows }) => {
-  ptys.get(role)?.resize(cols, rows);
+  clients.get(role)?.resize(cols, rows);
 });
 
 ipcMain.on('swarm:cleanup', () => {
@@ -73,7 +67,7 @@ ipcMain.on('swarm:cleanup', () => {
   const tmuxSocket = fs.readFileSync(socketFile, 'utf8').trim();
   const windowIds = path.join(workingDir, '.swarmforge', 'window-ids');
   const cleanupScript = path.join(__dirname, '..', 'swarm-cleanup.sh');
-  execFile(cleanupScript, [tmuxSocket, windowIds, ...ptys.keys()], err => {
+  execFile(cleanupScript, [tmuxSocket, windowIds, ...clients.keys()], err => {
     if (err) console.error('swarm-cleanup.sh failed:', err.message);
   });
 });
@@ -86,6 +80,6 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  ptys.forEach(p => p.kill());
+  clients.forEach(c => c.kill());
   app.quit();
 });
