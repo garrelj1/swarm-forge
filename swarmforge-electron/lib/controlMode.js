@@ -37,8 +37,7 @@ class ControlModeClient extends EventEmitter {
     this._paneId = null;
     this._remainder = '';
     this._seenOpen = false;
-    this._pendingCmds = new Map(); // seq → { resolve, reject }
-    this._seq = 0;
+    this._pendingCmds = []; // FIFO queue — tmux responds in command order
 
     const tmuxArgs = socket
       ? ['-S', socket, '-CC', 'attach', '-t', session]
@@ -53,7 +52,7 @@ class ControlModeClient extends EventEmitter {
     this._pty.onData(raw => this._process(raw));
     this._pty.onExit(() => {
       this._pendingCmds.forEach(({ reject }) => reject(new Error('pty exited')));
-      this._pendingCmds.clear();
+      this._pendingCmds = [];
       this.emit('exit');
     });
   }
@@ -77,9 +76,9 @@ class ControlModeClient extends EventEmitter {
     this._remainder = remainder;
 
     const blocks = parseCmdBlocks(lines);
-    blocks.forEach(({ seq, lines: bodyLines }) => {
-      const pending = this._pendingCmds.get(seq);
-      if (pending) { this._pendingCmds.delete(seq); pending.resolve(bodyLines); }
+    blocks.forEach(({ lines: bodyLines }) => {
+      const pending = this._pendingCmds.shift();
+      if (pending) pending.resolve(bodyLines);
     });
 
     lines.forEach(line => {
@@ -94,8 +93,7 @@ class ControlModeClient extends EventEmitter {
 
   command(cmd) {
     return new Promise((resolve, reject) => {
-      const seq = ++this._seq;
-      this._pendingCmds.set(seq, { resolve, reject });
+      this._pendingCmds.push({ resolve, reject });
       this._send(cmd);
     });
   }
