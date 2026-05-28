@@ -25,6 +25,7 @@ WINDOW_STATE_FILE="$STATE_DIR/windows.tsv"
 WINDOW_WATCHDOG_LOG="$STATE_DIR/window-watchdog.log"
 SESSIONS_FILE="$STATE_DIR/sessions.tsv"
 PROMPTS_DIR="$STATE_DIR/prompts"
+BASE_BRANCH_FILE="$STATE_DIR/base-branch"
 TMUX_SOCKET="${SWARMFORGE_TMUX_SOCKET:-${TMUX_TMPDIR:-${TMPDIR:-/tmp}}/tmux-${UID}/default}"
 TMUX_SOCKET_FILE="$STATE_DIR/tmux-socket"
 
@@ -331,9 +332,17 @@ EOF
   chmod +x "$SWARM_TOOLS_DIR/notify-agent.sh"
 }
 
+detect_base_branch() {
+  local b
+  b="$(git -C "$WORKING_DIR" branch --show-current 2>/dev/null)"
+  [[ -n "$b" ]] || b="$(git -C "$WORKING_DIR" rev-parse --short HEAD 2>/dev/null)"
+  echo "$b"
+}
+
 prepare_workspace() {
   mkdir -p "$WORKING_DIR/logs" "$WORKING_DIR/agent_context" "$STATE_DIR" "$PROMPTS_DIR" "$SWARM_TOOLS_DIR" "$WORKTREES_DIR"
   printf '%s\n' "$TMUX_SOCKET" > "$TMUX_SOCKET_FILE"
+  printf '%s\n' "$(detect_base_branch)" > "$BASE_BRANCH_FILE"
   check_helper_scripts
   write_sessions_file
   write_notify_script

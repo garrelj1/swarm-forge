@@ -180,3 +180,13 @@ Use these example directories as starting points for project-local `swarmforge/`
 ## Running SwarmForge
 
 Just type `swarm`. The windows should all pop up.
+
+## Merging Agent Work Back
+
+Each role that runs in a worktree commits to its own `swarmforge-<worktree>` branch, forked from whatever branch the project was on when the swarm started (recorded in `.swarmforge/base-branch`). When a role's work is ready, merge it back from the project root:
+
+```sh
+swarm-merge <role>        # e.g. swarm-merge specifier
+```
+
+This merges `swarmforge-<worktree>` into the recorded base branch. It refuses to run unless the project is checked out on that base branch and the working tree is clean, so it never merges over uncommitted work. Extra arguments are passed through to `git merge` (e.g. `swarm-merge specifier --no-ff`). Roles assigned to `master`/`none` already run in the main working directory, so there is nothing to merge.
