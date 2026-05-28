@@ -126,7 +126,7 @@ Use these example directories as starting points for project-local `swarmforge/`
 
 ## Getting Started
 
-**Prerequisites:** tmux, git, and a Claude or Codex CLI. For the web UI (optional but recommended): [Rust/cargo](https://rustup.rs).
+**Prerequisites:** tmux, git, and a Claude or Codex CLI. For the desktop UI (optional but recommended): [Node.js](https://nodejs.org) (provides `npx`).
 
 - In the directory where you want to use SwarmForge, pull the repository contents without creating a Git remote:
 
@@ -134,9 +134,9 @@ Use these example directories as starting points for project-local `swarmforge/`
   curl -L https://github.com/garrelj1/swarm-forge/archive/refs/heads/main.tar.gz | tar -xz --strip-components=1
   ```
 
-  This includes `swarmforge-ui/`, the source for the browser-based dashboard. `swarmforge.sh` builds it automatically on first run if `cargo` is available.
+  This includes `swarmforge-electron/`, the desktop UI. `swarmforge.sh` launches it automatically on startup if `npx` is available.
 
-- Edit `swarmforge/stack.prompt` to describe your project's toolchain. This is the only file that changes between projects — agents read it at startup to know what languages, commands, and quality tools to use.
+- Edit `swarmforge/stack.prompt` to describe your project's toolchain. This is the only file that changes between projects — agents read it at startup to know what languages, commands, and quality tools to use. You do **not** need to commit `swarmforge/`; the launcher mirrors it into each agent's worktree at startup.
 
   ```
   # Stack

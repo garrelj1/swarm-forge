@@ -372,14 +372,22 @@ prepare_worktrees() {
 
     write_worktree_notify_wrapper "$worktree_path"
 
+    # Mirror the swarmforge/ config into the worktree so agents can read their
+    # prompts without the directory being committed to the project.
+    rm -rf "$worktree_path/swarmforge"
+    cp -R "$SWARM_FORGE_DIR" "$worktree_path/swarmforge"
+
     local exclude_file
     exclude_file="$(git -C "$worktree_path" rev-parse --git-path info/exclude 2>/dev/null)"
     if [[ -n "$exclude_file" ]]; then
       mkdir -p "${exclude_file:h}"
       touch "$exclude_file"
-      if ! grep -qx "CLAUDE.md" "$exclude_file"; then
-        echo "CLAUDE.md" >> "$exclude_file"
-      fi
+      local pattern
+      for pattern in "CLAUDE.md" "swarmforge/" "swarmtools/"; do
+        if ! grep -qx "$pattern" "$exclude_file"; then
+          echo "$pattern" >> "$exclude_file"
+        fi
+      done
     fi
   done
 }
@@ -413,26 +421,6 @@ Read swarmforge/${role}.prompt, then read every file it refers to recursively, a
 EOF
 }
 
-write_agent_claude_md() {
-  local role="$1"
-  local worktree_path="$2"
-  local claude_md="$worktree_path/CLAUDE.md"
-  local sf_dir="$worktree_path/swarmforge"
-
-  {
-    printf '# SwarmForge Constitution\n\n'
-    cat "$sf_dir/constitution/project.prompt" 2>/dev/null
-    printf '\n'
-    cat "$sf_dir/stack.prompt" 2>/dev/null
-    printf '\n'
-    cat "$sf_dir/constitution/engineering.prompt" 2>/dev/null
-    printf '\n'
-    cat "$sf_dir/constitution/workflow.prompt" 2>/dev/null
-    printf '\n# Your Role\n\n'
-    cat "$sf_dir/${role}.prompt" 2>/dev/null
-  } > "$claude_md"
-}
-
 launch_role() {
   local index="$1"
   local role="${ROLES[$index]}"
@@ -444,7 +432,6 @@ launch_role() {
   local launch_cmd=""
 
   write_agent_instruction_file "$role" "$prompt_file"
-  write_agent_claude_md "$role" "$role_worktree"
 
   case "$agent" in
     claude)
