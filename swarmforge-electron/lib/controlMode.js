@@ -37,7 +37,7 @@ class ControlModeClient extends EventEmitter {
     this._paneId = null;
     this._remainder = '';
     this._seenOpen = false;
-    this._pendingCmds = new Map(); // seq → resolve
+    this._pendingCmds = new Map(); // seq → { resolve, reject }
     this._seq = 0;
 
     const tmuxArgs = socket
@@ -51,7 +51,11 @@ class ControlModeClient extends EventEmitter {
     });
 
     this._pty.onData(raw => this._process(raw));
-    this._pty.onExit(() => this.emit('exit'));
+    this._pty.onExit(() => {
+      this._pendingCmds.forEach(({ reject }) => reject(new Error('pty exited')));
+      this._pendingCmds.clear();
+      this.emit('exit');
+    });
   }
 
   _process(raw) {
@@ -74,8 +78,8 @@ class ControlModeClient extends EventEmitter {
 
     const blocks = parseCmdBlocks(lines);
     blocks.forEach(({ seq, lines: bodyLines }) => {
-      const resolve = this._pendingCmds.get(seq);
-      if (resolve) { this._pendingCmds.delete(seq); resolve(bodyLines); }
+      const pending = this._pendingCmds.get(seq);
+      if (pending) { this._pendingCmds.delete(seq); pending.resolve(bodyLines); }
     });
 
     lines.forEach(line => {
@@ -84,21 +88,21 @@ class ControlModeClient extends EventEmitter {
     });
   }
 
-  send(cmd) {
+  _send(cmd) {
     this._pty.write(cmd + '\n');
   }
 
   command(cmd) {
-    return new Promise(resolve => {
+    return new Promise((resolve, reject) => {
       const seq = ++this._seq;
-      this._pendingCmds.set(seq, resolve);
-      this.send(cmd);
+      this._pendingCmds.set(seq, { resolve, reject });
+      this._send(cmd);
     });
   }
 
   resize(cols, rows) {
     this._pty.resize(cols, rows);
-    if (this._paneId) this.send(`resize-pane -t ${this._paneId} -x ${cols} -y ${rows}`);
+    if (this._paneId) this._send(`resize-pane -t ${this._paneId} -x ${cols} -y ${rows}`);
   }
 
   async init() {
@@ -115,7 +119,7 @@ class ControlModeClient extends EventEmitter {
   writeInput(data) {
     if (!this._paneId) return;
     const hex = Buffer.from(data, 'binary').toString('hex').match(/.{2}/g).join(' ');
-    this.send(`send-keys -t ${this._paneId} -H ${hex}`);
+    this._send(`send-keys -t ${this._paneId} -H ${hex}`);
   }
 
   kill() {
