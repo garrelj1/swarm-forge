@@ -34,3 +34,29 @@ describe('parseLines', () => {
     expect(lines).toEqual(['a', 'b']);
   });
 });
+
+const { decodeOctal, parseOutputLine } = require('../lib/controlMode');
+
+describe('decodeOctal', () => {
+  test('decodes octal escape sequences', () => {
+    expect(decodeOctal('hi\\012there')).toBe('hi\nthere');
+  });
+
+  test('leaves non-octal text unchanged', () => {
+    expect(decodeOctal('hello world')).toBe('hello world');
+  });
+
+  test('decodes multiple escapes', () => {
+    expect(decodeOctal('\\150\\151')).toBe('hi');
+  });
+});
+
+describe('parseOutputLine', () => {
+  test('parses pane id and decoded data', () => {
+    expect(parseOutputLine('%output %0 hi\\012')).toEqual({ paneId: '%0', data: 'hi\n' });
+  });
+
+  test('returns null for non-output lines', () => {
+    expect(parseOutputLine('%begin 1 2 1')).toBeNull();
+  });
+});

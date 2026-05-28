@@ -7,4 +7,14 @@ function parseLines(raw) {
   return { lines, remainder };
 }
 
-module.exports = { parseLines };
+function decodeOctal(s) {
+  return s.replace(/\\([0-7]{3})/g, (_, o) => String.fromCharCode(parseInt(o, 8)));
+}
+
+function parseOutputLine(line) {
+  const m = line.match(/^%output (%\S+) (.*)/s);
+  if (!m) return null;
+  return { paneId: m[1], data: decodeOctal(m[2]) };
+}
+
+module.exports = { parseLines, decodeOctal, parseOutputLine };
