@@ -117,8 +117,9 @@ class ControlModeClient extends EventEmitter {
   }
 
   writeInput(data) {
-    if (!this._paneId) return;
-    const hex = Buffer.from(data, 'binary').toString('hex').match(/.{2}/g).join(' ');
+    if (!this._paneId || !data) return;
+    const hex = (Buffer.from(data, 'utf8').toString('hex').match(/.{2}/g) ?? []).join(' ');
+    if (!hex) return;
     this._send(`send-keys -t ${this._paneId} -H ${hex}`);
   }
 
