@@ -60,3 +60,32 @@ describe('parseOutputLine', () => {
     expect(parseOutputLine('%begin 1 2 1')).toBeNull();
   });
 });
+
+const { parseCmdBlocks } = require('../lib/controlMode');
+
+describe('parseCmdBlocks', () => {
+  test('returns body lines for a complete block', () => {
+    const lines = ['%begin 1748 42 1', '%0 @0', '%end 1748 42 1'];
+    expect(parseCmdBlocks(lines)).toEqual([{ seq: 42, lines: ['%0 @0'] }]);
+  });
+
+  test('returns empty array for no complete blocks', () => {
+    expect(parseCmdBlocks(['%begin 1748 42 1', 'partial'])).toEqual([]);
+  });
+
+  test('handles block with no body lines', () => {
+    const lines = ['%begin 1748 42 1', '%end 1748 42 1'];
+    expect(parseCmdBlocks(lines)).toEqual([{ seq: 42, lines: [] }]);
+  });
+
+  test('handles multiple blocks', () => {
+    const lines = [
+      '%begin 1748 1 1', 'a', '%end 1748 1 1',
+      '%begin 1748 2 1', 'b', '%end 1748 2 1',
+    ];
+    expect(parseCmdBlocks(lines)).toEqual([
+      { seq: 1, lines: ['a'] },
+      { seq: 2, lines: ['b'] },
+    ]);
+  });
+});
