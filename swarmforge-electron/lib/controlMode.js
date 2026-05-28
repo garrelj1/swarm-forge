@@ -34,6 +34,7 @@ function parseCmdBlocks(lines) {
 class ControlModeClient extends EventEmitter {
   constructor({ socket, session }) {
     super();
+    this._session = session;
     this._paneId = null;
     this._remainder = '';
     this._seenOpen = false;
@@ -66,6 +67,7 @@ class ControlModeClient extends EventEmitter {
       if (idx !== -1) {
         this._remainder = this._remainder.slice(idx + 8);
         this._seenOpen = true;
+        console.error(`[cm:${this._session}] DCS open found`);
       }
     }
 
@@ -75,10 +77,14 @@ class ControlModeClient extends EventEmitter {
     const { lines, remainder } = parseLines(this._remainder);
     this._remainder = remainder;
 
+    if (lines.length) console.error(`[cm:${this._session}] lines:`, lines);
+
     const blocks = parseCmdBlocks(lines);
     blocks.forEach(({ lines: bodyLines }) => {
+      console.error(`[cm:${this._session}] cmd block (${bodyLines.length} lines), queue depth ${this._pendingCmds.length}`);
       const pending = this._pendingCmds.shift();
       if (pending) pending.resolve(bodyLines);
+      else console.error(`[cm:${this._session}] WARNING: cmd block with no pending command`);
     });
 
     lines.forEach(line => {
@@ -104,9 +110,12 @@ class ControlModeClient extends EventEmitter {
   }
 
   async init() {
+    console.error(`[cm:${this._session}] init: sending list-panes`);
     const lines = await this.command(`list-panes -F "#{pane_id} #{window_id}"`);
+    console.error(`[cm:${this._session}] init: list-panes returned`, lines);
     if (!lines.length) throw new Error('no panes found');
     this._paneId = lines[0].split(' ')[0];
+    console.error(`[cm:${this._session}] init: paneId=${this._paneId}`);
 
     const screenLines = await this.command(`capture-pane -p -e -t ${this._paneId}`);
     if (screenLines.length) this.emit('output', this._paneId, screenLines.join('\r\n') + '\r\n');
