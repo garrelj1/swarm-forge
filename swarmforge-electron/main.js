@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification } = require('electron');
 const { execFile } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -44,6 +44,15 @@ function createWindow() {
 
       client.on('output', (paneId, data) => send('pty:data', { role, data }));
       client.on('exit', () => send('pty:data', { role, data: '\r\n\x1b[33m[session ended]\x1b[0m\r\n' }));
+
+      client.on('waiting-input', () => {
+        const n = new Notification({ title: 'SwarmForge', body: `${role} is waiting for input` });
+        n.on('click', () => mainWindow?.focus());
+        n.show();
+        send('pty:waiting-input', { role });
+      });
+
+      client.on('resumed', () => send('pty:resumed', { role }));
 
       client.init().catch(err => {
         send('pty:data', { role, data: `\x1b[31m[error] ${err.message}\x1b[0m\r\n` });
