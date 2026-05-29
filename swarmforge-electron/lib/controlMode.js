@@ -18,6 +18,22 @@ function parseOutputLine(line) {
   return { paneId: m[1], data: decodeOctal(m[2]) };
 }
 
+const ANSI_RE = /\x1b\[[0-9;]*[A-Za-z]|\x1b[()][A-B0-2]|\x1b[=>]|\x07/g;
+
+function stripAnsi(s) {
+  return s.replace(ANSI_RE, '');
+}
+
+const WAITING_PATTERNS = [
+  /❯\s+Yes/,
+  /Do you want to proceed\?/,
+];
+
+function isWaitingInput(text) {
+  const plain = stripAnsi(text);
+  return WAITING_PATTERNS.some(p => p.test(plain));
+}
+
 function parseCmdBlocks(lines) {
   const results = [];
   let current = null;
@@ -135,4 +151,4 @@ class ControlModeClient extends EventEmitter {
   }
 }
 
-module.exports = { parseLines, decodeOctal, parseOutputLine, parseCmdBlocks, ControlModeClient };
+module.exports = { parseLines, decodeOctal, parseOutputLine, parseCmdBlocks, stripAnsi, isWaitingInput, ControlModeClient };
