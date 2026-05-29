@@ -55,6 +55,7 @@ class ControlModeClient extends EventEmitter {
     this._remainder = '';
     this._seenOpen = false;
     this._pendingCmds = []; // FIFO queue — tmux responds in command order
+    this._waitingInput = false;
 
     const tmuxArgs = socket
       ? ['-S', socket, '-CC', 'attach', '-t', session]
@@ -105,7 +106,17 @@ class ControlModeClient extends EventEmitter {
 
     lines.forEach(line => {
       const out = parseOutputLine(line);
-      if (out) this.emit('output', out.paneId, out.data);
+      if (!out) return;
+      this.emit('output', out.paneId, out.data);
+      if (isWaitingInput(out.data)) {
+        if (!this._waitingInput) {
+          this._waitingInput = true;
+          this.emit('waiting-input');
+        }
+      } else if (this._waitingInput) {
+        this._waitingInput = false;
+        this.emit('resumed');
+      }
     });
   }
 
