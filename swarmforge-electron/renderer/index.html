@@ -14,6 +14,14 @@
     .gutter { background: #333; }
     .gutter-horizontal { cursor: col-resize; width: 4px; }
     .gutter-vertical { cursor: row-resize; height: 4px; }
+    .panel-label--waiting {
+      background: #7a5c00;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.6; }
+    }
   </style>
   <link rel="stylesheet" href="../node_modules/xterm/css/xterm.css">
 </head>
