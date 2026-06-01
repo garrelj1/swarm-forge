@@ -30,6 +30,7 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
   mainWindow.webContents.on('did-finish-load', () => {
+    mainWindow.setTitle(`SwarmForge — ${path.basename(workingDir)}`);
     const tsvPath = path.join(workingDir, '.swarmforge', 'sessions.tsv');
     const sessions = parseSessions(tsvPath);
 
