@@ -89,3 +89,37 @@ describe('parseCmdBlocks', () => {
     ]);
   });
 });
+
+const { stripAnsi, isWaitingInput } = require('../lib/controlMode');
+
+describe('stripAnsi', () => {
+  test('removes SGR sequences', () => {
+    expect(stripAnsi('\x1b[32mhello\x1b[0m')).toBe('hello');
+  });
+
+  test('leaves plain text unchanged', () => {
+    expect(stripAnsi('hello world')).toBe('hello world');
+  });
+});
+
+describe('isWaitingInput', () => {
+  test('detects tool permission prompt', () => {
+    expect(isWaitingInput('  ❯ Yes\n  No\n')).toBe(true);
+  });
+
+  test('detects unsafe command prompt', () => {
+    expect(isWaitingInput('Do you want to proceed?\n1. Yes\n2. No\n')).toBe(true);
+  });
+
+  test('detects prompt with ANSI sequences around it', () => {
+    expect(isWaitingInput('\x1b[32m❯\x1b[0m Yes')).toBe(true);
+  });
+
+  test('returns false for normal output', () => {
+    expect(isWaitingInput('Running tests...\n> jest\n')).toBe(false);
+  });
+
+  test('returns false for empty string', () => {
+    expect(isWaitingInput('')).toBe(false);
+  });
+});

@@ -35,6 +35,7 @@ function buildLayout(sessions) {
     const label = document.createElement('div');
     label.className = 'panel-label';
     label.textContent = s.role;
+    label.id = `label-${s.role}`;
 
     const termDiv = document.createElement('div');
     termDiv.className = 'panel-term';
@@ -114,4 +115,14 @@ window.swarm.onSessions(sessions => {
 // Route pty output to the correct terminal
 window.swarm.onPtyData(({ role, data }) => {
   terminals.get(role)?.term.write(data);
+});
+
+window.swarm.onWaitingInput(({ role }) => {
+  const label = document.getElementById(`label-${role}`);
+  label?.classList.add('panel-label--waiting');
+});
+
+window.swarm.onResumed(({ role }) => {
+  const label = document.getElementById(`label-${role}`);
+  label?.classList.remove('panel-label--waiting');
 });
