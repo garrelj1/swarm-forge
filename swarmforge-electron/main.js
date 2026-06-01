@@ -24,7 +24,7 @@ function createWindow() {
       contextIsolation: false,
       nodeIntegration: true,
     },
-    title: 'SwarmForge',
+    title: `SwarmForge — ${path.basename(workingDir)}`,
   });
 
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
