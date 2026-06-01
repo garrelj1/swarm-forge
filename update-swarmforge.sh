@@ -42,6 +42,7 @@ WORKING_DIR="$(cd "$WORKING_DIR" && pwd)"
 FRAMEWORK_FILES=(
   swarmforge.sh
   swarm-cleanup.sh
+  swarm-terminal-adapter.sh
   swarmlog.sh
   swarm-window-watchdog.sh
   update-swarmforge.sh
@@ -112,6 +113,36 @@ for file in "${FILES_TO_UPDATE[@]}"; do
   fi
   (( CHANGED++ )) || true
 done
+
+# Sync terminal-adapters/
+TERMINAL_ADAPTERS_UPSTREAM="$TMPDIR_WORK/terminal-adapters"
+TERMINAL_ADAPTERS_LOCAL="$WORKING_DIR/terminal-adapters"
+if [[ -d "$TERMINAL_ADAPTERS_UPSTREAM" ]]; then
+  while IFS= read -r -d '' src; do
+    rel="${src#$TERMINAL_ADAPTERS_UPSTREAM/}"
+    dst="$TERMINAL_ADAPTERS_LOCAL/$rel"
+
+    if [[ -f "$dst" ]] && diff -q "$src" "$dst" > /dev/null 2>&1; then
+      (( ALREADY_CURRENT++ )) || true
+      continue
+    fi
+
+    if [[ "$DRY_RUN" == true ]]; then
+      if [[ -f "$dst" ]]; then
+        echo -e "${CYAN}  would update: terminal-adapters/$rel${RESET}"
+        diff "$dst" "$src" || true
+      else
+        echo -e "${GREEN}  would add: terminal-adapters/$rel${RESET}"
+      fi
+    else
+      mkdir -p "$(dirname "$dst")"
+      cp "$src" "$dst"
+      [[ -x "$src" ]] && chmod +x "$dst"
+      echo -e "${GREEN}  updated: terminal-adapters/$rel${RESET}"
+    fi
+    (( CHANGED++ )) || true
+  done < <(find "$TERMINAL_ADAPTERS_UPSTREAM" -type f -print0)
+fi
 
 # Sync swarmforge-electron/ lib and renderer trees (skip node_modules and tests)
 SF_ELECTRON_UPSTREAM="$TMPDIR_WORK/swarmforge-electron"

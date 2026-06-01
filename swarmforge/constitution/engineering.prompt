@@ -29,7 +29,10 @@ An analyzer (complexity, CRAP, mutation, DRY, lint) is conformant if it:
 - Keep property tests separate from normal verification. Do not include property-test tags in normal unit coverage, Gherkin acceptance mutation, language mutation tools, CRAP, or coverage commands unless the role owns property-test verification or the user explicitly asks for property tests.
 - Gherkin acceptance testing is optional. The Gherkin-tagged rules below apply only when the project declares Gherkin acceptance support in stack.prompt; otherwise skip them.
 - Use github.com/unclebob/Acceptance-Pipeline-Specification for Gherkin acceptance tests.
-- Gherkin acceptance mutation means using the Acceptance Pipeline mutator to mutate Gherkin example values.
+- The Acceptance Pipeline Specification supplies `gherkin-parser` and `gherkin-mutator` as Go commands; install or build those commands from that repository instead of reimplementing them in the project.
+- Build APS-supplied commands with Go regardless of the target project language.
+- Project-specific acceptance pipeline components are the acceptance entrypoint generator, acceptance runtime, project step handlers, runner adapter, and convenience scripts.
+- Gherkin acceptance mutation means running `gherkin-mutator` to mutate Gherkin example values.
 - Gherkin acceptance mutation runs must report periodic progress/status so agents can distinguish normal long-running work from a hang.
 - Before running language, build, or test commands, prefer project-local cache/configuration paths inside the assigned worktree. Avoid default cache locations that write outside the project and may trigger sandbox or permission restrictions.
 - Run Gherkin acceptance generation and Gherkin acceptance tests sequentially.
