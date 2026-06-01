@@ -22,4 +22,4 @@ You are the architect.
 - When complete, commit architectural changes and:
   - Notify the coder and refactorer.
   - Notify the specifier that the job is complete.
-  - Use the handoff format for all notifications.
+  - Use the file-based handoff format for all notifications.

@@ -28,6 +28,7 @@ PROMPTS_DIR="$STATE_DIR/prompts"
 BASE_BRANCH_FILE="$STATE_DIR/base-branch"
 TMUX_SOCKET="${SWARMFORGE_TMUX_SOCKET:-${TMUX_TMPDIR:-${TMPDIR:-/tmp}}/tmux-${UID}/default}"
 TMUX_SOCKET_FILE="$STATE_DIR/tmux-socket"
+TERMINAL_BACKEND=""
 
 typeset -a ROLES=()
 typeset -a AGENTS=()
@@ -38,6 +39,8 @@ typeset -a WORKTREE_PATHS=()
 typeset -A ROLE_INDEX=()
 typeset -A WORKTREE_INDEX=()
 typeset -i CLEANUP_OWNER_INDEX=1
+typeset -i TMUX_WINDOW_BASE_INDEX=0
+typeset -i TMUX_PANE_BASE_INDEX=0
 typeset -i i=0
 
 check_dependency() {
@@ -45,6 +48,52 @@ check_dependency() {
     echo -e "${RED}Error:${RESET} '$1' is required but not installed."
     exit 1
   fi
+}
+
+get_tmux_option() {
+  local option="$1"
+  local scope="$2"
+  local default_value="$3"
+  local value=""
+
+  case "$scope" in
+    session)
+      value="$(tmux -S "$TMUX_SOCKET" show-options -gqv "$option" 2>/dev/null || true)"
+      ;;
+    window)
+      value="$(tmux -S "$TMUX_SOCKET" show-window-options -gqv "$option" 2>/dev/null || true)"
+      ;;
+  esac
+
+  if [[ "$value" == <-> ]]; then
+    echo "$value"
+  else
+    echo "$default_value"
+  fi
+}
+
+detect_tmux_base_indexes() {
+  local probe_session=""
+
+  mkdir -p "$TMUX_SOCKET_DIR"
+  if ! tmux -S "$TMUX_SOCKET" info >/dev/null 2>&1; then
+    probe_session="swarmforge-probe-$$"
+    tmux -S "$TMUX_SOCKET" new-session -d -s "$probe_session" "sleep 60" >/dev/null
+  fi
+
+  TMUX_WINDOW_BASE_INDEX="$(get_tmux_option base-index session 0)"
+  TMUX_PANE_BASE_INDEX="$(get_tmux_option pane-base-index window 0)"
+
+  if [[ -n "$probe_session" ]]; then
+    tmux -S "$TMUX_SOCKET" kill-session -t "$probe_session" >/dev/null 2>&1 || true
+  fi
+}
+
+tmux_agent_target() {
+  local session="$1"
+  local window="$2"
+
+  echo "${session}:${window}.${TMUX_PANE_BASE_INDEX}"
 }
 
 ensure_initial_gitignore() {
@@ -111,6 +160,8 @@ initialize_git_repo() {
 has_command() {
   command -v "$1" &>/dev/null
 }
+
+source "$SCRIPT_DIR/swarm-terminal-adapter.sh"
 
 remove_nonessential_clone_files() {
   if [[ "${WORKING_DIR:t}" == "swarm-forge" ]]; then
@@ -202,7 +253,7 @@ parse_config() {
     fi
 
     case "$agent" in
-      claude|codex) ;;
+      claude|codex|copilot|grok) ;;
       *)
         echo -e "${RED}Error:${RESET} Unsupported agent '$agent' for role '$role'"
         exit 1
@@ -251,9 +302,16 @@ write_sessions_file() {
 
 check_helper_scripts() {
   local helper
-  for helper in swarm-cleanup.sh swarm-window-watchdog.sh swarmlog.sh; do
+  for helper in swarm-cleanup.sh swarm-window-watchdog.sh swarm-terminal-adapter.sh swarmlog.sh; do
     if [[ ! -x "$SCRIPT_DIR/$helper" ]]; then
       echo -e "${RED}Error:${RESET} Required helper script not found or not executable: $SCRIPT_DIR/$helper"
+      exit 1
+    fi
+  done
+
+  for helper in terminal-app.sh ghostty.sh windows-terminal.sh none.sh; do
+    if [[ ! -x "$SCRIPT_DIR/terminal-adapters/$helper" ]]; then
+      echo -e "${RED}Error:${RESET} Required terminal adapter not found or not executable: $SCRIPT_DIR/terminal-adapters/$helper"
       exit 1
     fi
   done
@@ -291,9 +349,18 @@ if [[ ! -f "$TMUX_SOCKET_FILE" ]]; then
   exit 1
 fi
 TMUX_SOCKET="$(< "$TMUX_SOCKET_FILE")"
+TMUX_WINDOW_BASE_INDEX="$(tmux -S "$TMUX_SOCKET" show-options -gqv base-index 2>/dev/null || echo 0)"
+if [[ ! "$TMUX_WINDOW_BASE_INDEX" == <-> ]]; then
+  TMUX_WINDOW_BASE_INDEX=0
+fi
+TMUX_PANE_BASE_INDEX="$(tmux -S "$TMUX_SOCKET" show-window-options -gqv pane-base-index 2>/dev/null || echo 0)"
+if [[ ! "$TMUX_PANE_BASE_INDEX" == <-> ]]; then
+  TMUX_PANE_BASE_INDEX=0
+fi
 
 if [[ $# -lt 2 ]]; then
   echo "Usage: notify-agent.sh <target-role-or-index> \"message\"" >&2
+  echo "       notify-agent.sh <target-role-or-index> --file <message-file>" >&2
   exit 1
 fi
 
@@ -321,12 +388,27 @@ TARGET_SESSION=$(resolve_session "$1") || {
   exit 1
 }
 
-MESSAGE="${*:2}"
-tmux -S "$TMUX_SOCKET" send-keys -t "${TARGET_SESSION}:0.0" -l -- "$MESSAGE"
+shift
+if [[ "${1:-}" == "--file" ]]; then
+  if [[ $# -ne 2 ]]; then
+    echo "Usage: notify-agent.sh <target-role-or-index> --file <message-file>" >&2
+    exit 1
+  fi
+  MESSAGE_FILE="$2"
+  if [[ ! -f "$MESSAGE_FILE" ]]; then
+    echo "Message file not found: $MESSAGE_FILE" >&2
+    exit 1
+  fi
+  MESSAGE="$(< "$MESSAGE_FILE")"
+else
+  MESSAGE="$*"
+fi
+
+tmux -S "$TMUX_SOCKET" send-keys -t "${TARGET_SESSION}:${TMUX_WINDOW_BASE_INDEX}.${TMUX_PANE_BASE_INDEX}" -l -- "$MESSAGE"
 sleep 0.15
-tmux -S "$TMUX_SOCKET" send-keys -t "${TARGET_SESSION}:0.0" C-m
+tmux -S "$TMUX_SOCKET" send-keys -t "${TARGET_SESSION}:${TMUX_WINDOW_BASE_INDEX}.${TMUX_PANE_BASE_INDEX}" C-m
 sleep 0.05
-tmux -S "$TMUX_SOCKET" send-keys -t "${TARGET_SESSION}:0.0" C-j
+tmux -S "$TMUX_SOCKET" send-keys -t "${TARGET_SESSION}:${TMUX_WINDOW_BASE_INDEX}.${TMUX_PANE_BASE_INDEX}" C-j
 EOF
 
   chmod +x "$SWARM_TOOLS_DIR/notify-agent.sh"
@@ -411,6 +493,8 @@ check_backend_dependencies() {
     case "${AGENTS[$i]}" in
       claude) check_dependency claude ;;
       codex) check_dependency codex ;;
+      copilot) check_dependency copilot ;;
+      grok) check_dependency grok ;;
     esac
   done
 }
@@ -434,6 +518,21 @@ Read swarmforge/${role}.prompt, then read every file it refers to recursively, a
 EOF
 }
 
+send_initial_grok_prompt() {
+  local session="$1"
+  local display="$2"
+  local prompt_file="$3"
+
+  (
+    sleep 3
+    tmux -S "$TMUX_SOCKET" send-keys -t "$(tmux_agent_target "$session" "$display")" -l -- "$(< "$prompt_file")"
+    sleep 0.15
+    tmux -S "$TMUX_SOCKET" send-keys -t "$(tmux_agent_target "$session" "$display")" C-m
+    sleep 0.05
+    tmux -S "$TMUX_SOCKET" send-keys -t "$(tmux_agent_target "$session" "$display")" C-j
+  ) &!
+}
+
 launch_role() {
   local index="$1"
   local role="${ROLES[$index]}"
@@ -453,10 +552,16 @@ launch_role() {
     codex)
       launch_cmd="export PATH='$SWARM_TOOLS_DIR:$SCRIPT_DIR':\$PATH && cd '$role_worktree' && codex -C '$role_worktree' \"\$(cat '$prompt_file')\""
       ;;
+    copilot)
+      launch_cmd="export PATH='$SWARM_TOOLS_DIR:$SCRIPT_DIR':\$PATH && cd '$role_worktree' && copilot -C '$role_worktree' --name 'SwarmForge ${display}' -i \"\$(cat '$prompt_file')\""
+      ;;
+    grok)
+      launch_cmd="export PATH='$SWARM_TOOLS_DIR:$SCRIPT_DIR':\$PATH && cd '$role_worktree' && grok --cwd '$role_worktree' --permission-mode acceptEdits --rules \"\$(cat '$prompt_file')\""
+      ;;
   esac
 
   if [[ "$index" -eq "${CLEANUP_OWNER_INDEX}" ]]; then
-    launch_cmd="${launch_cmd}; exit_code=\$?; nohup '$SCRIPT_DIR/swarm-cleanup.sh' '$TMUX_SOCKET' '$WINDOW_IDS_FILE'"
+    launch_cmd="${launch_cmd}; exit_code=\$?; SWARMFORGE_TERMINAL_BACKEND='$TERMINAL_BACKEND' nohup '$SCRIPT_DIR/swarm-cleanup.sh' '$TMUX_SOCKET' '$WINDOW_IDS_FILE'"
     local session_name
     for session_name in "${SESSIONS[@]}"; do
       [[ -n "$session_name" ]] || continue
@@ -465,24 +570,11 @@ launch_role() {
     launch_cmd+=" >/dev/null 2>&1 &!; exit \$exit_code"
   fi
 
-  tmux -S "$TMUX_SOCKET" send-keys -t "${session}:${display}.0" "$launch_cmd" Enter
-  mkdir -p "$STATE_DIR/panes"
-  tmux -S "$TMUX_SOCKET" pipe-pane -t "${session}:${display}.0" -o "cat >> '$STATE_DIR/panes/${role}.log'"
+  tmux -S "$TMUX_SOCKET" send-keys -t "$(tmux_agent_target "$session" "$display")" "$launch_cmd" Enter
+  if [[ "$agent" == "grok" ]]; then
+    send_initial_grok_prompt "$session" "$display" "$prompt_file"
+  fi
   echo -e "  ${CYAN}[${display}]${RESET} started in session ${session}"
-}
-
-open_terminal_window() {
-  local session="$1"
-  local title="$2"
-  osascript <<EOF
-tell application "Terminal"
-  activate
-  set newTab to do script ""
-  do script "cd '$WORKING_DIR' && exec tmux -S '$TMUX_SOCKET' attach-session -t '${session}'" in newTab
-  set custom title of newTab to "${title}"
-  return id of front window
-end tell
-EOF
 }
 
 choose_cleanup_owner() {
@@ -491,6 +583,7 @@ choose_cleanup_owner() {
 
 check_dependency tmux
 check_dependency git
+detect_tmux_base_indexes
 remove_nonessential_clone_files
 initialize_git_repo
 ensure_runtime_git_excludes
@@ -499,6 +592,8 @@ check_backend_dependencies
 prepare_workspace
 prepare_worktrees
 choose_cleanup_owner
+TERMINAL_BACKEND="$(detect_terminal_backend)"
+load_terminal_backend "$TERMINAL_BACKEND"
 
 local_session=""
 for local_session in "${SESSIONS[@]}"; do
@@ -543,30 +638,41 @@ for (( i = 1; i <= ${#ROLES[@]}; i++ )); do
   echo -e "  ${DISPLAY_NAMES[$i]}: ${SESSIONS[$i]}"
 done
 echo ""
-echo -e "${GREEN}Tip: Use $WORKING_DIR/swarmtools/notify-agent.sh <role-or-index> \"message\" while the swarm is running.${RESET}"
+echo -e "${GREEN}Tip: Use $WORKING_DIR/swarmtools/notify-agent.sh <role-or-index> --file <message-file> while the swarm is running.${RESET}"
 echo -e "${GREEN}Tip: Reattach manually with 'tmux -S $TMUX_SOCKET attach-session -t <session-name>' if needed.${RESET}"
 echo ""
 
-if has_command osascript; then
-  echo -e "Opening separate Terminal windows for each session..."
-  : > "$WINDOW_IDS_FILE"
-  : > "$WINDOW_STATE_FILE"
+if terminal_backend_can_open_sessions; then
+  echo -e "Opening separate $(terminal_backend_label) surfaces for each session..."
+  if terminal_backend_tracks_windows; then
+    : > "$WINDOW_IDS_FILE"
+    : > "$WINDOW_STATE_FILE"
+  fi
+  previous_window_id=""
   for (( i = 1; i <= ${#ROLES[@]}; i++ )); do
-    window_id="$(open_terminal_window "${SESSIONS[$i]}" "SwarmForge ${DISPLAY_NAMES[$i]}")"
-    echo "$window_id" >> "$WINDOW_IDS_FILE"
-    printf '%s\t%s\t%s\t%s\n' \
-      "$i" \
-      "$window_id" \
-      "${SESSIONS[$i]}" \
-      "SwarmForge ${DISPLAY_NAMES[$i]}" >> "$WINDOW_STATE_FILE"
+    window_id="$(terminal_open_session "${SESSIONS[$i]}" "SwarmForge ${DISPLAY_NAMES[$i]}" "$previous_window_id")"
+    if terminal_backend_tracks_windows; then
+      echo "$window_id" >> "$WINDOW_IDS_FILE"
+      printf '%s\t%s\t%s\t%s\n' \
+        "$i" \
+        "$window_id" \
+        "${SESSIONS[$i]}" \
+        "SwarmForge ${DISPLAY_NAMES[$i]}" >> "$WINDOW_STATE_FILE"
+      previous_window_id="$window_id"
+    fi
   done
-  nohup "$SCRIPT_DIR/swarm-window-watchdog.sh" \
-    "$WINDOW_STATE_FILE" \
-    "$WINDOW_IDS_FILE" \
-    "$CLEANUP_OWNER_INDEX" \
-    "$TMUX_SOCKET" \
-    "$WORKING_DIR" > "$WINDOW_WATCHDOG_LOG" 2>&1 &
+  if terminal_backend_tracks_windows; then
+    nohup "$SCRIPT_DIR/swarm-window-watchdog.sh" \
+      "$WINDOW_STATE_FILE" \
+      "$WINDOW_IDS_FILE" \
+      "$CLEANUP_OWNER_INDEX" \
+      "$TMUX_SOCKET" \
+      "$WORKING_DIR" \
+      "$TERMINAL_BACKEND" > "$WINDOW_WATCHDOG_LOG" 2>&1 &
+  else
+    echo -e "${YELLOW}$(terminal_backend_label) surfaces are not trackable; window watchdog is disabled for this backend.${RESET}"
+  fi
 else
-  echo -e "${YELLOW}osascript not found; attaching current shell to '${SESSIONS[$CLEANUP_OWNER_INDEX]}' instead.${RESET}"
+  echo -e "${YELLOW}No terminal backend found; attaching current shell to '${SESSIONS[$CLEANUP_OWNER_INDEX]}' instead.${RESET}"
   tmux -S "$TMUX_SOCKET" attach-session -t "${SESSIONS[$CLEANUP_OWNER_INDEX]}"
 fi
