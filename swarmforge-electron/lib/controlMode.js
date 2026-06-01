@@ -115,7 +115,7 @@ class ControlModeClient extends EventEmitter {
         }
       } else if (this._waitingInput) {
         this._waitingInput = false;
-        this.emit('resumed');
+        queueMicrotask(() => this.emit('resumed'));
       }
     });
   }
