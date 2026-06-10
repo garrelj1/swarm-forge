@@ -17,16 +17,19 @@ SWARM_FORGE_DIR="$WORKING_DIR/swarmforge"
 SWARM_TOOLS_DIR="$WORKING_DIR/swarmtools"
 WORKTREES_DIR="$WORKING_DIR/.worktrees"
 CONFIG_FILE="$SWARM_FORGE_DIR/swarmforge.conf"
-ROLES_DIR="$SWARM_FORGE_DIR"
+ROLES_DIR="$SWARM_FORGE_DIR/roles"
 CONSTITUTION_FILE="$SWARM_FORGE_DIR/constitution.prompt"
 STATE_DIR="$WORKING_DIR/.swarmforge"
 WINDOW_IDS_FILE="$STATE_DIR/window-ids"
 WINDOW_STATE_FILE="$STATE_DIR/windows.tsv"
 WINDOW_WATCHDOG_LOG="$STATE_DIR/window-watchdog.log"
 SESSIONS_FILE="$STATE_DIR/sessions.tsv"
-PROMPTS_DIR="$STATE_DIR/prompts"
 BASE_BRANCH_FILE="$STATE_DIR/base-branch"
-TMUX_SOCKET="${SWARMFORGE_TMUX_SOCKET:-${TMUX_TMPDIR:-${TMPDIR:-/tmp}}/tmux-${UID}/default}"
+PROMPTS_DIR="$STATE_DIR/prompts"
+TMUX_SOCKET_DIR="/private/tmp/swarmforge-${UID}"
+PROJECT_SOCKET_ID="$(printf '%s' "$WORKING_DIR" | cksum)"
+PROJECT_SOCKET_ID="${PROJECT_SOCKET_ID%% *}"
+TMUX_SOCKET="$TMUX_SOCKET_DIR/$PROJECT_SOCKET_ID.sock"
 TMUX_SOCKET_FILE="$STATE_DIR/tmux-socket"
 TERMINAL_BACKEND=""
 
@@ -172,7 +175,7 @@ remove_nonessential_clone_files() {
     return
   fi
 
-  rm -rf "$WORKING_DIR/README.md" "$WORKING_DIR/SwarmForgeInitSpec.md" "$WORKING_DIR/examples" "$WORKING_DIR/docs"
+  rm -rf "$WORKING_DIR/examples"
 }
 
 display_name_for_role() {
@@ -422,9 +425,9 @@ detect_base_branch() {
 }
 
 prepare_workspace() {
-  mkdir -p "$WORKING_DIR/logs" "$WORKING_DIR/agent_context" "$STATE_DIR" "$PROMPTS_DIR" "$SWARM_TOOLS_DIR" "$WORKTREES_DIR"
-  printf '%s\n' "$TMUX_SOCKET" > "$TMUX_SOCKET_FILE"
+  mkdir -p "$WORKING_DIR/logs" "$WORKING_DIR/agent_context" "$STATE_DIR" "$PROMPTS_DIR" "$SWARM_TOOLS_DIR" "$WORKTREES_DIR" "$TMUX_SOCKET_DIR"
   printf '%s\n' "$(detect_base_branch)" > "$BASE_BRANCH_FILE"
+  printf '%s\n' "$TMUX_SOCKET" > "$TMUX_SOCKET_FILE"
   check_helper_scripts
   write_sessions_file
   write_notify_script
@@ -447,10 +450,6 @@ write_worktree_notify_wrapper() {
 }
 
 prepare_worktrees() {
-  # Drop registrations for worktrees whose directories were deleted, so a
-  # leftover branch isn't reported as "used by" a phantom worktree.
-  git -C "$WORKING_DIR" worktree prune 2>/dev/null || true
-
   local i worktree_name worktree_path branch_name
   for (( i = 1; i <= ${#ROLES[@]}; i++ )); do
     worktree_name="${WORKTREE_NAMES[$i]}"
@@ -514,7 +513,7 @@ write_agent_instruction_file() {
 
   cat > "$prompt_file" <<EOF
 Read swarmforge/constitution.prompt, then read every file it refers to recursively, and obey all of those instructions.
-Read swarmforge/${role}.prompt, then read every file it refers to recursively, and follow all of those instructions.
+Read swarmforge/roles/${role}.prompt, then read every file it refers to recursively, and follow all of those instructions.
 EOF
 }
 
@@ -622,15 +621,6 @@ for (( i = 1; i <= ${#ROLES[@]}; i++ )); do
 done
 
 echo ""
-ELECTRON_APP="$SCRIPT_DIR/swarmforge-electron"
-if [[ -d "$ELECTRON_APP" ]] && has_command npx; then
-  (cd "$ELECTRON_APP" && unset ELECTRON_RUN_AS_NODE && npx --yes electron . --working-dir "$WORKING_DIR") &
-  echo -e "${GREEN}SwarmForge UI launched.${RESET}"
-elif ! has_command npx; then
-  echo -e "${YELLOW}npx not found — skipping UI (install Node.js to enable).${RESET}"
-else
-  echo -e "${YELLOW}swarmforge-electron not found — skipping UI.${RESET}"
-fi
 echo -e "${GREEN}${BOLD}SwarmForge is ready.${RESET}"
 echo -e "Working directory: ${WORKING_DIR}"
 echo -e "Sessions:"
