@@ -94,18 +94,7 @@ if ! curl -fsSL "$MAIN_URL" | tar -xz --strip-components=1 -C "$TMPDIR_MAIN"; th
   exit 1
 fi
 
-MAIN_FILES=(
-  swarm
-  update-swarmforge.sh
-  swarmforge/constitution.prompt
-  swarmforge/constitution/engineering.prompt
-  swarmforge/constitution/workflow.prompt
-)
-
-for file in "${MAIN_FILES[@]}"; do
-  sync_file "$TMPDIR_MAIN/$file" "$WORKING_DIR/$file"
-done
-
+sync_file "$TMPDIR_MAIN/update-swarmforge.sh" "$WORKING_DIR/update-swarmforge.sh"
 sync_dir "$TMPDIR_MAIN/swarmforge/scripts" "$WORKING_DIR/swarmforge/scripts"
 
 # Sync swarmforge-electron/ (skip node_modules and tests)
@@ -117,7 +106,7 @@ if [[ -d "$TMPDIR_MAIN/swarmforge-electron" ]]; then
     -not -path "*/node_modules/*" -not -path "*/tests/*" -type f -print0)
 fi
 
-# --- Optionally update role prompts from pack branch ---
+# --- Update swarm wrapper and constitution/role prompts from pack branch ---
 if [[ -n "$PACK" ]]; then
   TMPDIR_PACK="$(mktemp -d)"
   echo -e "${CYAN}Downloading ${PACK} branch from fork...${RESET}"
@@ -125,6 +114,10 @@ if [[ -n "$PACK" ]]; then
     echo -e "${RED}Pack branch download failed.${RESET}" >&2
     exit 1
   fi
+  sync_file "$TMPDIR_PACK/swarm" "$WORKING_DIR/swarm"
+  sync_file "$TMPDIR_PACK/swarmforge/constitution.prompt" "$WORKING_DIR/swarmforge/constitution.prompt"
+  sync_file "$TMPDIR_PACK/swarmforge/constitution/engineering.prompt" "$WORKING_DIR/swarmforge/constitution/engineering.prompt"
+  sync_file "$TMPDIR_PACK/swarmforge/constitution/workflow.prompt" "$WORKING_DIR/swarmforge/constitution/workflow.prompt"
   sync_dir "$TMPDIR_PACK/swarmforge/roles" "$WORKING_DIR/swarmforge/roles"
 fi
 
@@ -136,5 +129,5 @@ else
 fi
 
 if [[ -z "$PACK" ]]; then
-  echo -e "${YELLOW}Role prompts not updated. Use --pack four-pack or --pack six-pack to update them.${RESET}"
+  echo -e "${YELLOW}swarm wrapper, constitution, and role prompts not updated. Use --pack four-pack or --pack six-pack to update them.${RESET}"
 fi
