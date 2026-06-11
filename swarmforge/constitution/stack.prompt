@@ -1,0 +1,67 @@
+# Stack
+
+## Languages
+- Backend:  <language and runtime, e.g. Rust (Cargo)>
+- Frontend: <language and runtime, e.g. TypeScript + React + Vite>
+
+## Commands
+
+### Build
+- Backend:  <e.g. cargo build>
+- Frontend: <e.g. cd web && npm run build>
+
+### Test
+- Backend:  <e.g. cargo test>
+- Frontend: <e.g. cd web && npx vitest run>
+
+### Type Check / Lint
+- Backend:  <e.g. cargo clippy -- -D warnings>
+- Frontend: <e.g. cd web && tsc --noEmit>
+
+### Format
+- Backend:  <e.g. cargo fmt>
+- Frontend: <e.g. cd web && npx prettier --write src/>
+
+## Quality Tools (install if missing)
+
+Each analyzer below MUST conform to the Analyzer Contract in
+constitution/engineering.prompt: accepts a path, emits a single JSON
+document to stdout (`tool`, `metric`, `threshold`, `violations`,
+optional `summary`), exits 0 on pass and non-zero on any violation.
+
+- Coverage:    <tool name>
+  Install:     <install command>
+  Run:         <run command>
+
+- Mutation:    <tool name, e.g. cargo-mutants / mutate4go / Stryker>
+  Install:     <install command>
+  Run:         <command emitting Analyzer Contract JSON with metric=mutation>
+  Threshold:   90  # minimum kill rate (%)
+
+- Complexity:  <tool name, e.g. gocyclo / radon cc / PMD>
+  Install:     <install command>
+  Run:         <command emitting Analyzer Contract JSON with metric=complexity>
+  Threshold:   4   # max cyclomatic complexity per method
+
+- CRAP:        <tool name, e.g. crap4go / custom plugin>
+  Install:     <install command>
+  Run:         <command emitting Analyzer Contract JSON with metric=crap>
+  Threshold:   30  # exclusive upper bound per method
+
+- DRY:         <tool name, e.g. dry4go / jscpd / leave blank to skip>
+  Install:     <install command>
+  Run:         <command emitting Analyzer Contract JSON with metric=dry>
+  Threshold:   <project-specific; omit if DRY not enforced here>
+
+- Lint:        <tool name, e.g. clippy / eslint / ruff>
+  Install:     <install command>
+  Run:         <command emitting Analyzer Contract JSON with metric=lint>
+  Threshold:   0   # zero warnings, zero errors
+
+## Quality Thresholds (Constitution-owned, mirrored for reference)
+- Lint:        zero warnings, zero errors
+- Tests:       all pass
+- Coverage:    80%+
+- Mutation:    ≥ 90% mutants killed
+- Complexity:  ≤ 4 per method
+- CRAP:        < 30 per method
