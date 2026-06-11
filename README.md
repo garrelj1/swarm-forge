@@ -57,12 +57,12 @@ In the directory where you want to use SwarmForge, choose a runnable branch and 
 
 ```sh
 BRANCH=four-pack
-curl -L "https://github.com/unclebob/swarm-forge/archive/refs/heads/${BRANCH}.tar.gz" | tar -xz --strip-components=1
+curl -L "https://github.com/garrelj1/swarm-forge/archive/refs/heads/${BRANCH}.tar.gz" | tar -xz --strip-components=1
 ```
 
 Use `BRANCH=six-pack` instead when you want the six-agent workflow. Do not use `main` for this command; `main` is documentary and stores the shared operational scripts, while the runnable branches provide the configurations and prompts intended for projects.
 
-After copying a runnable branch, start the swarm from the target project:
+After copying a runnable branch, fill in `swarmforge/constitution/stack.prompt` with your project's language, build commands, and quality tools. Then start the swarm:
 
 ```sh
 ./swarm
@@ -74,13 +74,25 @@ The windows should open automatically.
 
 To stop the swarm, close the first window listed in `swarmforge/swarmforge.conf`. That cleanup window shuts down the tmux sessions and closes the remaining tracked windows.
 
+## Updating an Existing Project
+
+To pull the latest framework scripts, `swarm` wrapper, constitution, and role prompts into a project that already has SwarmForge:
+
+```sh
+./update-swarmforge.sh --pack four-pack   # or six-pack
+```
+
+This updates `swarmforge/scripts/`, the `swarm` wrapper, and the constitution and role prompts from the specified pack branch. It never overwrites `swarmforge/swarmforge.conf`, `swarmforge/constitution/project.prompt`, or `swarmforge/constitution/stack.prompt` — those are project-specific.
+
+If `swarmforge/swarmforge.conf` does not yet exist, it is bootstrapped from the pack branch on first run.
+
 ## What SwarmForge Does
 
 SwarmForge is a lightweight, tmux-based orchestration layer that:
 
 - Launches a **config-driven swarm** from a project-local `swarmforge/swarmforge.conf`
 - Creates one tmux session per configured role and opens a terminal surface for each role when the selected backend supports it
-- Reads behavior from project-local `swarmforge/<role>.prompt` files plus a layered `swarmforge/constitution.prompt`
+- Reads behavior from project-local `swarmforge/roles/<role>.prompt` files plus a layered `swarmforge/constitution.prompt`
 - Supports per-role backends such as `claude`, `codex`, `copilot`, or `grok`
 - Creates a project-local `swarmtools/` directory with notification helpers for the active swarm
 - Creates git worktrees under `.worktrees/` for roles assigned to dedicated worktree names
@@ -108,13 +120,15 @@ swarmforge/
     project.prompt
     engineering.prompt
     workflow.prompt
-  <role>.prompt
-  ...
+    stack.prompt
+  roles/
+    <role>.prompt
+    ...
 ```
 
 `constitution.prompt` is the entry point. It can define precedence and direct agents to read subordinate constitution files in order. That lets you separate project-specific rules from engineering rules and workflow rules without forcing everything into one large prompt.
 
-Each role in `swarmforge/swarmforge.conf` maps to a corresponding `swarmforge/<role>.prompt` file.
+Each role in `swarmforge/swarmforge.conf` maps to a corresponding `swarmforge/roles/<role>.prompt` file.
 
 ## How It Works
 
@@ -137,13 +151,13 @@ In a runnable branch:
 window <role> <agent> <worktree>
 ```
 
-You can define as many windows as your project needs. Each `role` maps to a corresponding prompt file at `swarmforge/<role>.prompt`, so a config containing `architect`, `coder`, `reviewer`, `research`, and `release` windows would expect:
+You can define as many windows as your project needs. Each `role` maps to a corresponding prompt file at `swarmforge/roles/<role>.prompt`, so a config containing `architect`, `coder`, `reviewer`, `research`, and `release` windows would expect:
 
-- `swarmforge/architect.prompt`
-- `swarmforge/coder.prompt`
-- `swarmforge/reviewer.prompt`
-- `swarmforge/research.prompt`
-- `swarmforge/release.prompt`
+- `swarmforge/roles/architect.prompt`
+- `swarmforge/roles/coder.prompt`
+- `swarmforge/roles/reviewer.prompt`
+- `swarmforge/roles/research.prompt`
+- `swarmforge/roles/release.prompt`
 
 This lets each project choose its own swarm shape instead of being locked to a fixed set of roles.
 
