@@ -102,7 +102,7 @@ SwarmForge is a lightweight, tmux-based orchestration layer that:
 ## Core Features
 
 - **Config-Driven Topology** — The swarm shape comes from `swarmforge/swarmforge.conf`, not hardcoded shell variables.
-- **Project-Local Roles** — Each role is defined by `swarmforge/<role>.prompt` in the working tree being orchestrated.
+- **Project-Local Roles** — Each role is defined by `swarmforge/roles/<role>.prompt` in the working tree being orchestrated.
 - **Layered Constitution** — `swarmforge/constitution.prompt` can delegate to subordinate files such as `swarmforge/constitution/project.prompt`, `engineering.prompt`, and `workflow.prompt`.
 - **Backend Selection Per Role** — A role can launch `claude`, `codex`, `copilot`, or `grok`.
 - **Observable Swarm** — Open one Terminal window per role and watch the sessions in real time.
@@ -126,9 +126,37 @@ swarmforge/
     ...
 ```
 
-`constitution.prompt` is the entry point. It can define precedence and direct agents to read subordinate constitution files in order. That lets you separate project-specific rules from engineering rules and workflow rules without forcing everything into one large prompt.
+`constitution.prompt` is the entry point. It directs agents to read subordinate constitution files in order, letting you separate project-specific rules from engineering rules, workflow rules, and stack details without forcing everything into one large prompt.
 
 Each role in `swarmforge/swarmforge.conf` maps to a corresponding `swarmforge/roles/<role>.prompt` file.
+
+### Constitution Files: What You Fill In
+
+Two constitution files are project-specific and must be authored by you. They are never overwritten by `update-swarmforge.sh`.
+
+**`swarmforge/constitution/project.prompt`** — Describes *this project* to every agent. Write it in plain prose. Include:
+- What the project does and who it's for
+- Project-specific conventions agents must follow (naming, branching, what not to touch)
+- Any workflow preferences specific to this project
+
+Example:
+```
+# Project
+
+This is a Node.js REST API for call center quality scoring.
+- The main branch is `main`. Feature branches follow the pattern `feature/<ticket>`.
+- Do not modify files under `scripts/migrations/` without explicit user approval.
+- All database queries go through the repository layer in `src/repositories/`.
+```
+
+**`swarmforge/constitution/stack.prompt`** — Describes *the technical toolchain* to roles that run builds, tests, and quality tools. Fill in the placeholders with your actual commands. Include:
+- Language and runtime
+- Build, test, lint, and format commands
+- Quality tool names, install commands, run commands, and thresholds
+
+A blank template is bootstrapped from the pack branch when you first run `update-swarmforge.sh --pack <pack>`. Fill it in before starting the swarm — agents that run tests or mutation tools read it for the exact commands to use.
+
+The other three constitution files — `engineering.prompt`, `workflow.prompt`, and `constitution.prompt` itself — come pre-filled from the pack branch and are updated by `update-swarmforge.sh`. You should not need to edit them.
 
 ## How It Works
 
