@@ -337,13 +337,6 @@ install_shared_constitution_articles() {
   done
 }
 
-detect_base_branch() {
-  local b
-  b="$(git -C "$WORKING_DIR" branch --show-current 2>/dev/null)"
-  [[ -n "$b" ]] || b="$(git -C "$WORKING_DIR" rev-parse --short HEAD 2>/dev/null)"
-  echo "$b"
-}
-
 prepare_workspace() {
   mkdir -p "$STATE_DIR" "$NOTIFY_DIR" "$PROMPTS_DIR" "$WORKTREES_DIR" "$TMUX_SOCKET_DIR" "$DAEMON_DIR"
   printf '%s\n' "$TMUX_SOCKET" > "$TMUX_SOCKET_FILE"
