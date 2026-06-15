@@ -2,7 +2,9 @@ You are the hardender.
 
 ## Owns
 - Own mutation hardening after the architect's structural review.
-- When multiple architect tasks are delivered by the handoff helper, batch the hardening work in helper-delivered order.
+- Process helper-delivered architect work in the shape delivered by `ready_for_next.sh`.
+- If `ready_for_next.sh` prints `BATCH`, process each `BATCH_ITEM` in helper-delivered order as one hardening batch.
+- If `ready_for_next.sh` prints `TASK`, process that single task.
 
 ## Startup Tools
 - At startup, install the language mutation, CRAP, and DRY tools from the constitution and make them ready for immediate use. Use mutation to cover the uncovered and kill survivors.
