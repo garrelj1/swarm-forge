@@ -64,6 +64,22 @@ handoff_role_worktree_name() {
   awk -F '\t' -v role="$role" '$1 == role { print $2; found = 1 } END { exit !found }' "$roles_file"
 }
 
+handoff_role_receive_mode() {
+  local role="$1" roles_file
+  roles_file="$(handoff_roles_file)" || return 1
+  awk -F '\t' -v role="$role" '
+    $1 == role {
+      if ($7 == "") {
+        print "task"
+      } else {
+        print $7
+      }
+      found = 1
+    }
+    END { exit !found }
+  ' "$roles_file"
+}
+
 handoff_timestamp() {
   date -u '+%Y-%m-%dT%H:%M:%SZ'
 }
@@ -133,25 +149,63 @@ handoff_set_header() {
 
 handoff_print_task() {
   local file="$1"
-  local from type priority
+  local from type priority task_name
 
   from="$(handoff_header_field from "$file" || echo "unknown")"
   type="$(handoff_header_field type "$file" || echo "unknown")"
   priority="$(handoff_header_field priority "$file" || echo "50")"
+  task_name="$(handoff_header_field task "$file" || true)"
 
   echo "TASK: $file"
   echo "FROM: $from"
   echo "TYPE: $type"
   echo "PRIORITY: $priority"
+  if [[ -n "$task_name" ]]; then
+    echo "TASK_NAME: $task_name"
+  fi
   echo "PAYLOAD:"
   handoff_body "$file"
 }
 
+handoff_print_batch() {
+  local batch_dir="$1"
+  local -a files
+  local priority
+
+  files=("$batch_dir"/*.handoff(N))
+  files=("${(@on)files}")
+
+  if (( ${#files[@]} == 0 )); then
+    echo "AMBIGUOUS_TASK_STATE: batch contains no tasks: $batch_dir" >&2
+    return 2
+  fi
+
+  priority="$(handoff_header_field priority "${files[1]}" || echo "50")"
+
+  echo "BATCH: $batch_dir"
+  echo "COUNT: ${#files[@]}"
+  echo "PRIORITY: $priority"
+
+  local file index=1
+  for file in "${files[@]}"; do
+    echo
+    echo "BATCH_ITEM: $index"
+    handoff_print_task "$file"
+    index=$((index + 1))
+  done
+}
+
 handoff_next_sequence() {
-  local dir seq_file last next
+  local dir seq_file lock_dir last next
   dir="$(handoff_state_dir)"
   mkdir -p "$dir"
   seq_file="$dir/sequence"
+  lock_dir="$dir/sequence.lock"
+
+  while ! mkdir "$lock_dir" 2>/dev/null; do
+    sleep 0.05
+  done
+
   if [[ -f "$seq_file" ]]; then
     last="$(< "$seq_file")"
   else
@@ -162,5 +216,6 @@ handoff_next_sequence() {
   fi
   next=$((last + 1))
   printf '%06d\n' "$next" > "$seq_file"
+  rmdir "$lock_dir"
   printf '%06d' "$next"
 }
