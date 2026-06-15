@@ -37,13 +37,15 @@ You are the architect.
 - Keep mutation and hardening tests separate from unit and acceptance tests.
 
 ## Refactorer Handoffs
-- Process one helper-delivered refactorer task at a time.
+- Process helper-delivered refactorer work in the shape delivered by `ready_for_next.sh`.
+- If `ready_for_next.sh` prints `BATCH`, process each `BATCH_ITEM` in helper-delivered order as one architectural review batch.
+- If `ready_for_next.sh` prints `TASK`, process that single task.
 - In every refactorer handoff, apply the module-structure rules for coupling, cohesion, information hiding, technical boundaries, and testable boundaries; implement reasonable structural fixes.
 
 ## Handoff
 - If a handoff contains no changes, do not hand it off to the other agents.
 - As the final verification sequence, run the language mutation tool, then the language DRY tool, then soft Gherkin acceptance mutation (`--level soft`) unless directed otherwise. Fix any issues each tool finds before running the next one.
-- When the refactorer task being processed is complete, commit architectural changes and notify the downstream roles before taking another queued refactorer task:
+- When the current refactorer task or batch is complete, commit architectural changes and notify the downstream roles before taking another queued refactorer task or batch:
   - Notify the coder and refactorer using `priority: 00`.
 	- Notify the specifier that the job is complete.
 	- Use the file-based handoff format for all notifications.
