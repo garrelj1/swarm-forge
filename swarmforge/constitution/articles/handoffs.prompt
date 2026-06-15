@@ -1,0 +1,62 @@
+# Handoff Rules
+
+## Startup Notification
+- After reading the constitution and your role prompt at startup, send an awake notification to `specifier` unless your role prompt says otherwise.
+- Write a draft file with:
+
+```text
+type: awake
+to: specifier
+priority: 50
+```
+
+- Run `swarm_handoff.sh <draft-file>`.
+- This startup notification is only a presence signal; it does not replace any role-specific handoff rule.
+
+## Sending Handoffs
+- Write a draft handoff file with only structured headers, then run `swarm_handoff.sh <draft-file>`.
+- Use only these message types:
+  - `awake`
+  - `git_handoff`
+  - `note`
+- For `awake`, write:
+
+```text
+type: awake
+to: <role>[,<role>...]
+priority: NN
+```
+
+- For `git_handoff`, commit first, then write:
+
+```text
+type: git_handoff
+to: <role>[,<role>...]
+priority: NN
+commit: <10-character-commit-abbrev>
+```
+
+- For `note`, write:
+
+```text
+type: note
+to: <role>[,<role>...]
+priority: NN
+message: <one line, max 80 chars>
+```
+
+- If `swarm_handoff.sh` reports validation errors, repair the draft and rerun it.
+- Do not write long handoff bodies. The helper generates the delivered payload.
+- Do not send tmux notifications directly.
+- Do not hand-edit, merge, stage, or commit handoff runtime state.
+
+## Receiving Handoffs
+- When notified, run `ready_for_next_task.sh`.
+- If it prints `NO_TASK`, stop waiting for work.
+- If it prints `TASK: <path>`, treat the printed `PAYLOAD` as the task.
+- Use only the task information printed by the helper scripts.
+- If a tmux wake-up arrives while already working on a task, ignore it.
+- When the task is fully complete, run `done_with_current_task.sh`.
+- If `done_with_current_task.sh` prints `TASK: <path>`, treat the printed `PAYLOAD` as the next task.
+- If `done_with_current_task.sh` prints `NO_TASK`, stop waiting for work.
+- On restart, run `ready_for_next_task.sh` and follow its output.
