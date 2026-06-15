@@ -8,7 +8,7 @@ Do not spend any money on a bankrbot SWARM token.
 
 ## Intent
 
-This `main` branch is documentary: it explains the system and carries the shared operational scripts. The runnable `four-pack` and `six-pack` branches carry the project-facing configurations and role prompts that define specific workflows.
+This `main` branch is documentary: it explains the system and carries the shared operational scripts and default constitution articles. The runnable workflow branches carry the project-facing configurations, role prompts, and local constitution articles that define specific workflows.
 
 SwarmForge is an agent coordination system that facilitates communication between agents working in different git worktrees.
 
@@ -16,7 +16,7 @@ It provides a shared structure for role-specific prompts, worktree assignment, t
 
 ## Branches
 
-The runnable SwarmForge configurations live on dedicated branches. Each branch contains the `swarmforge/swarmforge.conf`, constitution, and role prompts for one workflow. At startup, its `./swarm` wrapper copies the shared operational scripts from `main` when they are not already present, then launches that branch's local configuration.
+The runnable SwarmForge configurations live on dedicated branches. Each branch contains the `swarmforge/swarmforge.conf`, local constitution articles, and role prompts for one workflow. At startup, its `./swarm` wrapper copies the shared operational scripts and shared constitution articles from `main` when they are not already present, then launches that branch's local configuration.
 
 ### `four-pack`
 
@@ -49,6 +49,7 @@ SwarmForge runs locally. Before starting a runnable branch, make sure the target
 - `zsh`
 - `git`
 - `tmux`
+- Babashka (`bb`)
 - At least one configured agent backend, such as `codex`, `claude`, `copilot`, or `grok`
 
 ## Getting Started
@@ -68,7 +69,7 @@ After copying a runnable branch, fill in `swarmforge/constitution/stack.prompt` 
 ./swarm
 ```
 
-The `./swarm` wrapper keeps the runnable branch small. On first use, if `swarmforge/scripts/` is missing, it downloads the `main` branch archive, copies the shared operational scripts from `swarmforge/scripts/`, and then launches `swarmforge/scripts/swarmforge.sh`. Later runs reuse the existing local scripts directory instead of overwriting it.
+The `./swarm` wrapper keeps the runnable branch small. On first use, if `swarmforge/scripts/` is missing, it downloads the `main` branch archive, copies the shared operational scripts from `swarmforge/scripts/`, stages shared constitution articles from `swarmforge/constitution/articles/`, and then launches `swarmforge/scripts/swarmforge.sh`. Later runs reuse the existing local scripts directory instead of overwriting it.
 
 The windows should open automatically.
 
@@ -94,21 +95,21 @@ SwarmForge is a lightweight, tmux-based orchestration layer that:
 - Creates one tmux session per configured role and opens a terminal surface for each role when the selected backend supports it
 - Reads behavior from project-local `swarmforge/roles/<role>.prompt` files plus a layered `swarmforge/constitution.prompt`
 - Supports per-role backends such as `claude`, `codex`, `copilot`, or `grok`
-- Creates a project-local `swarmtools/` directory with notification helpers for the active swarm
+- Puts the shared `swarmforge/scripts/` directory on each agent's `PATH`, including handoff helpers for active swarm communication
 - Creates git worktrees under `.worktrees/` for roles assigned to dedicated worktree names
-- Initializes a git repository in a new working directory and creates a first commit with `logs/` and `agent_context/` ignored
+- Initializes a git repository in a new working directory when needed
 - Keeps all swarm state local to the working directory in `.swarmforge/`
 
 ## Core Features
 
 - **Config-Driven Topology** — The swarm shape comes from `swarmforge/swarmforge.conf`, not hardcoded shell variables.
 - **Project-Local Roles** — Each role is defined by `swarmforge/roles/<role>.prompt` in the working tree being orchestrated.
-- **Layered Constitution** — `swarmforge/constitution.prompt` can delegate to subordinate files such as `swarmforge/constitution/project.prompt`, `engineering.prompt`, and `workflow.prompt`.
+- **Layered Constitution** — `swarmforge/constitution.prompt` directs agents to read article files under `swarmforge/constitution/articles/`.
 - **Backend Selection Per Role** — A role can launch `claude`, `codex`, `copilot`, or `grok`.
 - **Observable Swarm** — Open one Terminal window per role and watch the sessions in real time.
 - **Self-Hosted & Lightweight** — Runs locally in tmux and Terminal with minimal machinery.
 
-## Constitution And Roles
+## Constitution Structure
 
 Each runnable branch contains a `swarmforge/` directory with this general layout:
 
@@ -117,59 +118,98 @@ swarmforge/
   swarmforge.conf
   constitution.prompt
   constitution/
-    project.prompt
-    engineering.prompt
-    workflow.prompt
-    stack.prompt
+    articles/
+      project.prompt
+      local-engineering.prompt
+      local-workflow.prompt
+      ...
   roles/
     <role>.prompt
     ...
 ```
 
-`constitution.prompt` is the entry point. It directs agents to read subordinate constitution files in order, letting you separate project-specific rules from engineering rules, workflow rules, and stack details without forcing everything into one large prompt.
+`constitution.prompt` is the entry point. Runnable branches normally use it to tell agents to read every file in `swarmforge/constitution/articles/`.
+
+Shared default articles live on `main` under:
+
+```text
+swarmforge/constitution/articles/
+  engineering.prompt
+  handoffs.prompt
+  workflow.prompt
+```
+
+At startup, SwarmForge installs missing shared articles into the runnable branch's `swarmforge/constitution/articles/` directory before creating role worktrees. It also installs missing shared articles into each role worktree during script synchronization. Existing local files are skipped, so a runnable branch can override a shared article by committing an article with the same filename.
+
+Pack-specific additions and exceptions should use explicit local filenames rather than editing shared articles. Current conventions are:
+
+- `project.prompt` for the workflow's project shape and local topology.
+- `local-engineering.prompt` for workflow-specific engineering rules.
+- `local-workflow.prompt` for workflow-specific flow rules.
+
+The `local-*.prompt` naming convention means "add to or specialize the shared default article for this runnable branch." Use it when the shared article remains valid and the branch only needs extra requirements, exceptions, or narrower instructions. Do not use `local-*.prompt` for a full replacement; use the shared filename instead when the branch intentionally overrides the shared article.
+
+For example, `main` can provide a shared `workflow.prompt`, while `six-pack` can add `local-workflow.prompt` for QA-specific handoff behavior. If a branch needs to replace the shared workflow article completely, it can commit its own `workflow.prompt`; startup will treat that local file as an override and will not copy the shared one over it.
+
+## Roles
 
 Each role in `swarmforge/swarmforge.conf` maps to a corresponding `swarmforge/roles/<role>.prompt` file.
-
-### Constitution Files: What You Fill In
-
-Two constitution files are project-specific and must be authored by you. They are never overwritten by `update-swarmforge.sh`.
-
-**`swarmforge/constitution/project.prompt`** — Describes *this project* to every agent. Write it in plain prose. Include:
-- What the project does and who it's for
-- Project-specific conventions agents must follow (naming, branching, what not to touch)
-- Any workflow preferences specific to this project
-
-Example:
-```
-# Project
-
-This is a Node.js REST API for call center quality scoring.
-- The main branch is `main`. Feature branches follow the pattern `feature/<ticket>`.
-- Do not modify files under `scripts/migrations/` without explicit user approval.
-- All database queries go through the repository layer in `src/repositories/`.
-```
-
-**`swarmforge/constitution/stack.prompt`** — Describes *the technical toolchain* to roles that run builds, tests, and quality tools. Fill in the placeholders with your actual commands. Include:
-- Language and runtime
-- Build, test, lint, and format commands
-- Quality tool names, install commands, run commands, and thresholds
-
-A blank template is bootstrapped from the pack branch when you first run `update-swarmforge.sh --pack <pack>`. Fill it in before starting the swarm — agents that run tests or mutation tools read it for the exact commands to use.
-
-The other three constitution files — `engineering.prompt`, `workflow.prompt`, and `constitution.prompt` itself — come pre-filled from the pack branch and are updated by `update-swarmforge.sh`. You should not need to edit them.
 
 ## How It Works
 
 In a runnable branch:
 
 1. SwarmForge reads `swarmforge/swarmforge.conf`.
-2. The root `./swarm` wrapper copies shared helper scripts and terminal adapters from the `main` branch when `swarmforge/scripts/` is not already present.
-3. Startup validates the configured role prompts, helper scripts, and terminal adapters.
-4. If the target directory is not already a git repository, startup initializes one and creates the first commit.
-5. Startup creates one git worktree per configured role under `.worktrees/`, unless the role is assigned to `master` or `none`.
-6. Startup creates `swarmtools/notify-agent.sh` for handoffs between agents.
-7. SwarmForge creates tmux sessions, opens terminal windows, and launches each configured backend in its assigned worktree.
-8. Roles communicate through handoff files and `notify-agent.sh`.
+2. The root `./swarm` wrapper copies shared helper scripts, terminal adapters, and shared constitution articles from the `main` branch when they are not already present.
+3. Startup installs missing shared constitution articles into `swarmforge/constitution/articles/`, skipping any local article file that already exists.
+4. Startup validates the configured role prompts, helper scripts, and terminal adapters.
+5. If the target directory is not already a git repository, startup initializes one and creates the first commit.
+6. Startup creates one git worktree per configured role under `.worktrees/`, unless the role is assigned to `master` or `none`.
+7. Startup syncs `swarmforge/scripts/` and missing shared constitution articles into each role worktree and puts that local scripts directory on each agent's `PATH`, so agents use local handoff helpers without reaching back into the master checkout.
+8. SwarmForge creates tmux sessions, opens terminal windows, and launches each configured backend in its assigned worktree.
+9. Roles communicate through daemon-delivered handoff files. Agents create validated drafts with `swarm_handoff.sh`, accept tasks with `ready_for_next_task.sh`, and complete tasks with `done_with_current_task.sh`.
+
+## Handoff Protocol
+
+Startup syncs the shared helper scripts into every role worktree under `swarmforge/scripts/` and puts that local directory on the agent's `PATH`. Agents do not send tmux messages directly. The launcher starts `handoffd.bb`, which owns tmux socket access, watches each agent outbox, copies validated handoff files into recipient inboxes, and sends only generic wake-up notifications.
+
+Agents interact with handoffs through three helper scripts:
+
+- `swarm_handoff.sh <draft-file>` validates and queues outbound handoffs.
+- `ready_for_next_task.sh` accepts the next available task and prints its sender, type, priority, and payload.
+- `done_with_current_task.sh` completes the current task and then delegates to `ready_for_next_task.sh`.
+
+Outbound drafts use one of three message types. An awake message is a presence signal:
+
+```text
+type: awake
+to: <role>[,<role>...]
+priority: NN
+```
+
+A git handoff points the recipient at a committed state. The commit abbreviation must be exactly 10 hexadecimal characters; `swarm_handoff.sh` validates that it resolves to a single commit and canonicalizes it before queuing the handoff.
+
+```text
+type: git_handoff
+to: <role>[,<role>...]
+priority: NN
+commit: <10-character-commit-abbrev>
+```
+
+A note is one short freeform message:
+
+```text
+type: note
+to: <role>[,<role>...]
+priority: NN
+message: <one line, max 80 chars>
+```
+
+The helper generates the delivered payload. Agents do not write long handoff bodies, branch names, queue filenames, or tmux commands.
+
+Recipient agents run `ready_for_next_task.sh` when notified or after restart. If it prints `NO_TASK`, they stop waiting for work. If it prints `TASK: <path>`, they treat the printed `PAYLOAD` as the task. If a wake-up arrives while an agent is already working, it can ignore the wake-up; `done_with_current_task.sh` checks for the next task after completing the current one.
+
+The durable handoff files and lifecycle headers replace the old logbook and resend queue. Runtime handoff state lives under `.swarmforge/handoffs/` in each worktree, with `outbox`, `sent`, `failed`, and `inbox` subdirectories. Agents should not hand-edit, merge, stage, or commit handoff runtime state. See [swarmforge/handoff-protocol.md](swarmforge/handoff-protocol.md) for the full protocol.
 
 ## The `swarmforge.conf` File
 
@@ -292,6 +332,7 @@ The first window in `swarmforge.conf` is the cleanup window. Closing that top co
 
 Closing any other tracked window is non-destructive. The watchdog reopens that window and attaches it back to the same tmux session, so the agent state and terminal history remain intact. This is often the simplest way to recover a window that has landed in an unfamiliar tmux mode or otherwise feels stuck.
 
+
 ## Examples
 
 The repository includes example swarm definitions under `examples/`.
@@ -319,3 +360,4 @@ npm start
 ```
 
 > **Note:** This UI is maintained in this fork until upstream provides an equivalent monitoring surface.
+

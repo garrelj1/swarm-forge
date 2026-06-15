@@ -4,8 +4,6 @@
 .swarmforge/
 .worktrees/
 docs/plans/
-swarmtools/
-logs/
-agent_context/
 node_modules/
 logbook.json
+
