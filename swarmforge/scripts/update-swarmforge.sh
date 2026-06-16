@@ -116,8 +116,7 @@ if [[ -n "$PACK" ]]; then
   fi
   sync_file "$TMPDIR_PACK/swarm" "$WORKING_DIR/swarm"
   sync_file "$TMPDIR_PACK/swarmforge/constitution.prompt" "$WORKING_DIR/swarmforge/constitution.prompt"
-  sync_file "$TMPDIR_PACK/swarmforge/constitution/engineering.prompt" "$WORKING_DIR/swarmforge/constitution/engineering.prompt"
-  sync_file "$TMPDIR_PACK/swarmforge/constitution/workflow.prompt" "$WORKING_DIR/swarmforge/constitution/workflow.prompt"
+  sync_dir "$TMPDIR_PACK/swarmforge/constitution/articles" "$WORKING_DIR/swarmforge/constitution/articles"
   sync_dir "$TMPDIR_PACK/swarmforge/roles" "$WORKING_DIR/swarmforge/roles"
   # Bootstrap swarmforge.conf only if it doesn't exist yet
   if [[ ! -f "$WORKING_DIR/swarmforge/swarmforge.conf" ]]; then
