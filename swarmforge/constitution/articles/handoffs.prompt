@@ -1,12 +1,14 @@
 # Handoff Rules
 
 ## Startup Notification
-- After reading the constitution and your role prompt at startup, send an awake notification to `specifier` unless your role prompt says otherwise.
+- After reading the constitution and your role prompt at startup, send an awake
+  notification to the main branch agent, if any, unless you are that agent or
+  your role prompt says otherwise.
 - Write a draft file with:
 
 ```text
 type: awake
-to: specifier
+to: <main-branch-role>
 priority: 50
 ```
 
@@ -46,9 +48,8 @@ commit: <10-character-commit-abbrev>
   functional project change. Complete the inbound task instead.
 - Treat manifest-only, audit-only, generated metadata, formatting-only, and
   other non-functional churn as no forwardable change.
-- Use the stable task name assigned by the specifier when forwarding work for
-  the same task. If the handoff starts new work, invent a short stable task
-  name.
+- Preserve the received task name when forwarding work for the same task. If the
+  handoff starts new work, invent a short stable task name.
 - For `note`, write:
 
 ```text
@@ -59,6 +60,8 @@ message: <one line, max 80 chars>
 ```
 
 - If `swarm_handoff.sh` reports validation errors, repair the draft and rerun it.
+- After a successful send, the helper removes the draft file. If you need to
+  remove a stale draft manually, use `rm <draft-file>`, not `rm -f`.
 - Do not write long handoff bodies. The helper generates the delivered payload.
 - Do not send tmux notifications directly.
 - Do not hand-edit, merge, stage, or commit handoff runtime state.
