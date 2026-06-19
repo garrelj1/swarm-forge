@@ -98,15 +98,6 @@ fi
 sync_file "$TMPDIR_MAIN/update-swarmforge.sh" "$WORKING_DIR/update-swarmforge.sh"
 sync_dir "$TMPDIR_MAIN/swarmforge/scripts" "$WORKING_DIR/swarmforge/scripts"
 
-# Sync swarmforge-electron/ (skip node_modules and tests)
-if [[ -d "$TMPDIR_MAIN/swarmforge-electron" ]]; then
-  while IFS= read -r -d '' src; do
-    rel="${src#$TMPDIR_MAIN/swarmforge-electron/}"
-    sync_file "$src" "$WORKING_DIR/swarmforge-electron/$rel"
-  done < <(find "$TMPDIR_MAIN/swarmforge-electron" \
-    -not -path "*/node_modules/*" -not -path "*/tests/*" -type f -print0)
-fi
-
 # --- Update swarm wrapper and constitution/role prompts from pack branch ---
 if [[ -n "$PACK" ]]; then
   TMPDIR_PACK="$(mktemp -d)"

@@ -360,23 +360,15 @@ The repository includes example swarm definitions under `examples/`.
 
 These examples are documentation references only. Start real projects from the `four-pack` or `six-pack` branches so the project receives a complete, runnable SwarmForge configuration.
 
-## Electron UI (Fork Extension)
+## Dashboard (Fork Extension)
 
-This fork includes an optional Electron-based UI in `swarmforge-electron/` that provides a visual dashboard for monitoring running swarm sessions.
-
-### Features
-
-- Live session grid showing all active roles
-- Control mode display per role
-- Waiting-for-input notifications
+`swarmforge/scripts/swarm-dashboard.sh` tiles every live role session into a single terminal view — one pane per role, each nested-attached to its live tmux session. It auto-detects the project's dedicated tmux socket and session list from `.swarmforge/`.
 
 ### Usage
 
 ```sh
-cd swarmforge-electron
-npm install
-npm start
+swarmforge/scripts/swarm-dashboard.sh [working-dir]   # defaults to $PWD
 ```
 
-> **Note:** This UI is maintained in this fork until upstream provides an equivalent monitoring surface.
+Set `SWARM_DASH_COLS` to control the column count (default `3`). Pane borders show role names; press `Ctrl-b m` to toggle mouse mode (off = scroll the focused agent, on = click-to-focus a pane).
 

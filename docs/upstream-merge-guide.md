@@ -31,7 +31,7 @@ upstream" on a file listed under Fork Invariants without re-checking the goal.
 ## How upstream threatens each goal
 
 - **Generic template:** upstream sets `Project language: Babashka` in
-  `project.prompt`; deletes `examples/` and `swarmforge-electron/`.
+  `project.prompt`; deletes `examples/`.
 - **Isolation:** largely intact upstream (state is working-dir scoped). Watch for
   any new machine-global path (anything under `/tmp`, `$HOME`, or a fixed socket
   name that isn't keyed by the working directory).
@@ -66,9 +66,9 @@ upstream" on a file listed under Fork Invariants without re-checking the goal.
 
 | File | What to keep | Goal |
 |------|--------------|------|
-| `swarmforge-electron/` | Entire Electron UI directory. Upstream deleted it. Restore from HEAD. | — |
 | `examples/clojureHTW/` | Example swarm config. Upstream deleted it. Restore from HEAD. | 1 |
-| `README.md` | "Examples" and "Electron UI" sections at the bottom. Keep our additions. | — |
+| `swarmforge/scripts/swarm-dashboard.sh` | Fork's tiled tmux dashboard. Upstream doesn't have it; it rides along in the `scripts/` sync. Restore from HEAD if a merge drops it. | — |
+| `README.md` | "Examples" and "Dashboard" sections at the bottom. Keep our additions. | — |
 | `.gitignore` | Extra entries (`docs/plans/`, `node_modules/`, `logbook.json`). Keep ours. | — |
 
 ### `four-pack` / `six-pack` branches
@@ -113,7 +113,7 @@ git merge upstream/main --no-commit
 Expected conflicts:
 
 - **`.gitignore`** — take upstream's base, keep our extra entries.
-- **`README.md`** — keep our Examples and Electron UI sections.
+- **`README.md`** — keep our Examples and Dashboard sections.
 - **`swarmforge/scripts/swarmforge.sh`** — when upstream migrates the launcher to
   Babashka this becomes the thin wrapper `exec bb "$SCRIPT_DIR/swarmforge.bb"`.
   Take upstream's wrapper; the real logic lives in `swarmforge.bb`.
@@ -122,7 +122,6 @@ Restore deleted fork content:
 
 ```sh
 git checkout HEAD -- examples/clojureHTW/
-git checkout HEAD -- swarmforge-electron/
 git checkout HEAD -- swarmforge/scripts/update-swarmforge.sh
 ```
 
