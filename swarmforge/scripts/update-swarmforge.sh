@@ -24,8 +24,9 @@ usage() {
   echo "  --pack four-pack|six-pack   Also update role prompts from the specified pack branch"
   echo "  working-dir                 Directory to update (default: current directory)"
   echo ""
-  echo "Never touched: swarmforge/swarmforge.conf, swarmforge/constitution/project.prompt,"
-  echo "               swarmforge/constitution/stack.prompt"
+  echo "Never overwritten (project-specific): swarmforge/swarmforge.conf,"
+  echo "               swarmforge/constitution/articles/project.prompt,"
+  echo "               swarmforge/constitution/articles/stack.prompt"
   exit 1
 }
 
@@ -116,7 +117,19 @@ if [[ -n "$PACK" ]]; then
   fi
   sync_file "$TMPDIR_PACK/swarm" "$WORKING_DIR/swarm"
   sync_file "$TMPDIR_PACK/swarmforge/constitution.prompt" "$WORKING_DIR/swarmforge/constitution.prompt"
-  sync_dir "$TMPDIR_PACK/swarmforge/constitution/articles" "$WORKING_DIR/swarmforge/constitution/articles"
+  # Sync shared constitution articles, but never clobber the project's own
+  # project-specific prompts (project.prompt holds the language; stack.prompt the
+  # stack). Bootstrap those only if absent; keep all other articles current.
+  if [[ -d "$TMPDIR_PACK/swarmforge/constitution/articles" ]]; then
+    while IFS= read -r -d '' src; do
+      rel="${src#$TMPDIR_PACK/swarmforge/constitution/articles/}"
+      if [[ ( "$rel" == "project.prompt" || "$rel" == "stack.prompt" ) \
+            && -f "$WORKING_DIR/swarmforge/constitution/articles/$rel" ]]; then
+        continue
+      fi
+      sync_file "$src" "$WORKING_DIR/swarmforge/constitution/articles/$rel"
+    done < <(find "$TMPDIR_PACK/swarmforge/constitution/articles" -type f -print0)
+  fi
   sync_dir "$TMPDIR_PACK/swarmforge/roles" "$WORKING_DIR/swarmforge/roles"
   # Bootstrap swarmforge.conf only if it doesn't exist yet
   if [[ ! -f "$WORKING_DIR/swarmforge/swarmforge.conf" ]]; then

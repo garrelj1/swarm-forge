@@ -1,5 +1,6 @@
 (ns swarmforge.script-test
   (:require [babashka.fs :as fs]
+            [babashka.process :as p]
             [clojure.java.shell :as sh]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]))
@@ -101,12 +102,13 @@
                        "window cleaner codex cleaner batch\n"))
       (write-file (fs/path root "swarmforge/roles/coder.prompt") "coder\n")
       (write-file (fs/path root "swarmforge/roles/cleaner.prompt") "cleaner\n")
-      (let [result (run {:dir root} (script "swarmforge.bb") "--test-parse" (str root))]
+      (let [result (run {:dir root :env {"SWARMFORGE_INSTANCE" "demo"}}
+                        (script "swarmforge.bb") "--test-parse" (str root))]
         (is (str/includes? (:out result) "coder Coder"))
         (is (str/includes? (:out result) "cleaner Cleaner"))
         (is (str/includes? (:out result) "cleaner batch"))
-        (is (str/includes? (:out result) "swarmforge-coder"))
-        (is (str/includes? (:out result) "swarmforge-cleaner"))
+        (is (str/includes? (:out result) "swarmforge-demo-coder"))
+        (is (str/includes? (:out result) "swarmforge-demo-cleaner"))
         (is (fs/exists? (fs/path root ".swarmforge/tmux-socket"))))
       (finally
         (fs/delete-tree root)))))
@@ -208,7 +210,7 @@
                         "--yolo")
             command (:out result)]
         (is (str/includes? command "copilot -C "))
-        (is (re-find #"--name 'SwarmForge Coder' --yolo -i" command)))
+        (is (re-find #"--name 'SwarmForge test Coder' --yolo -i" command)))
       (finally
         (fs/delete-tree root)))))
 
@@ -276,4 +278,44 @@
         (is (= 0 (:exit result)))
         (is (= "" (:err result))))
       (finally
+        (fs/delete-tree root)))))
+
+(deftest swarmforge-namespaces-sessions-by-instance
+  (let [root (tmp-dir)]
+    (try
+      (write-file (fs/path root "swarmforge/constitution.prompt") "Read articles.\n")
+      (write-file (fs/path root "swarmforge/swarmforge.conf") "window coder codex master\n")
+      (write-file (fs/path root "swarmforge/roles/coder.prompt") "coder\n")
+      (let [alpha (run {:dir root :env {"SWARMFORGE_INSTANCE" "alpha"}}
+                       (script "swarmforge.bb") "--test-parse" (str root))
+            beta (run {:dir root :env {"SWARMFORGE_INSTANCE" "beta"}}
+                      (script "swarmforge.bb") "--test-parse" (str root))]
+        ;; Two swarms on one machine get distinct session names so they never
+        ;; collide on a shared tmux server or in the agent CLI's session store.
+        (is (str/includes? (:out alpha) "swarmforge-alpha-coder"))
+        (is (str/includes? (:out beta) "swarmforge-beta-coder"))
+        (is (not (str/includes? (:out alpha) "swarmforge-beta-coder"))))
+      (finally
+        (fs/delete-tree root)))))
+
+(deftest swarm-cleanup-spares-foreign-pids
+  ;; A stale pid-file whose PID was recycled must not let cleanup kill an
+  ;; unrelated process (e.g. another swarm's daemon).
+  (let [root (tmp-dir)
+        ids-file (fs/path root ".swarmforge/window-ids")
+        pid-file (fs/path root ".swarmforge/daemon/handoffd.pid")
+        victim (p/process ["sleep" "30"])
+        victim-pid (.pid (:proc victim))]
+    (try
+      (write-file ids-file "")
+      (write-file pid-file (str victim-pid "\n"))
+      (run {:dir root :env {"SWARMFORGE_TERMINAL_BACKEND" "none"}}
+           (str (fs/path scripts-dir "swarm-cleanup.sh"))
+           "/tmp/nonexistent.sock"
+           (str ids-file))
+      (Thread/sleep 300)
+      (is (.isAlive (:proc victim))
+          "cleanup must not TERM a non-handoffd PID")
+      (finally
+        (p/destroy victim)
         (fs/delete-tree root)))))

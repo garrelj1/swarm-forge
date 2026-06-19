@@ -25,7 +25,13 @@ DAEMON_PID_FILE="$WORKING_DIR/.swarmforge/daemon/handoffd.pid"
 if [[ -f "$DAEMON_PID_FILE" ]]; then
   daemon_pid="$(< "$DAEMON_PID_FILE")"
   if [[ "$daemon_pid" == <-> ]]; then
-    kill -TERM "$daemon_pid" 2>/dev/null || true
+    # Only kill if the PID is really this project's handoffd. A stale pid-file
+    # whose PID was recycled must never let us TERM an unrelated process or
+    # another swarm's daemon.
+    daemon_args="$(ps -p "$daemon_pid" -o args= 2>/dev/null || true)"
+    if [[ "$daemon_args" == *handoffd.bb* && "$daemon_args" == *"$WORKING_DIR"* ]]; then
+      kill -TERM "$daemon_pid" 2>/dev/null || true
+    fi
   fi
 fi
 

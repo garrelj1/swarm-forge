@@ -168,10 +168,35 @@
 (defn shutdown! []
   (reset! stopping? true))
 
+(defn live-handoffd?
+  "True only when pid names a running handoffd for THIS project root. Lets the
+  daemon refuse to start a duplicate and safely clear a stale pid-file. Portable
+  (no /proc dependency)."
+  [pid]
+  (and (re-matches #"[0-9]+" (str pid))
+       (let [{:keys [exit out]} (sh "ps" "-p" (str pid) "-o" "args=")]
+         (and (zero? exit)
+              (str/includes? out "handoffd.bb")
+              (str/includes? out (str project-root))))))
+
+(defn claim-pid-file! []
+  (when (fs/exists? pid-file)
+    (let [existing (str/trim (slurp (str pid-file)))]
+      (if (live-handoffd? existing)
+        (do
+          (log! "refusing-duplicate" existing)
+          (binding [*out* *err*]
+            (println (str "handoffd already running for " project-root " (pid " existing "); exiting.")))
+          (System/exit 0))
+        (do
+          (log! "clearing-stale-pidfile" existing)
+          (fs/delete-if-exists pid-file)))))
+  (spit (str pid-file) (str (.pid (java.lang.ProcessHandle/current)) "\n")))
+
 (defn -main []
   (fs/create-dirs daemon-dir)
   (fs/delete-if-exists stop-file)
-  (spit (str pid-file) (str (.pid (java.lang.ProcessHandle/current)) "\n"))
+  (claim-pid-file!)
   (.addShutdownHook (Runtime/getRuntime) (Thread. shutdown!))
   (log! "started")
   (try

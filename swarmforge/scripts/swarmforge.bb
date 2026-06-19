@@ -65,8 +65,27 @@
        (map str/capitalize)
        (str/join " ")))
 
-(defn session-name-for-role [role]
-  (str session-prefix "-" role))
+(defn instance-tag
+  "Per-swarm identifier used to namespace tmux sessions and agent names so
+  multiple swarms can run on one machine without colliding. Defaults to the
+  working-directory basename; override with $SWARMFORGE_INSTANCE. Sanitized to
+  characters safe in a tmux session name (no '.' or ':')."
+  [working-dir]
+  (let [override (System/getenv "SWARMFORGE_INSTANCE")
+        raw (if (str/blank? override)
+              (str (fs/file-name working-dir))
+              override)
+        cleaned (-> raw
+                    (str/replace #"[^A-Za-z0-9_-]" "-")
+                    (str/replace #"-+" "-")
+                    (str/replace #"^-+|-+$" ""))]
+    (if (str/blank? cleaned) "swarm" cleaned)))
+
+(defn session-name-for-role [instance role]
+  (str session-prefix "-" instance "-" role))
+
+(defn agent-name [instance display]
+  (str "SwarmForge " instance " " display))
 
 (defn worktree-path-for-name [worktrees-dir worktree]
   (fs/path worktrees-dir worktree))
@@ -178,7 +197,7 @@
                                       (worktree-path-for-name worktrees-dir worktree))
                       row {:role role
                            :agent agent
-                           :session (session-name-for-role role)
+                           :session (session-name-for-role (:instance ctx) role)
                            :display-name (display-name-for-role role)
                            :worktree-name worktree
                            :worktree-path worktree-path
@@ -323,9 +342,9 @@
     (write-agent-instruction-file! role prompt-file)
     (cond-> (str base
                 (case agent
-                  "claude" (str "claude --append-system-prompt-file " (sq (str prompt-file)) " --permission-mode acceptEdits -n " (sq (str "SwarmForge " display)) " " (extra-args-prefix row) "\"$(cat " (sq (str prompt-file)) ")\"")
+                  "claude" (str "claude --append-system-prompt-file " (sq (str prompt-file)) " --permission-mode acceptEdits -n " (sq (agent-name (:instance ctx) display)) " " (extra-args-prefix row) "\"$(cat " (sq (str prompt-file)) ")\"")
                   "codex" (str "codex -C " (sq (str role-worktree)) " " (extra-args-prefix row) "\"$(cat " (sq (str prompt-file)) ")\"")
-                  "copilot" (str "copilot -C " (sq (str role-worktree)) " --name " (sq (str "SwarmForge " display)) " " (extra-args-prefix row) "-i \"$(cat " (sq (str prompt-file)) ")\"")
+                  "copilot" (str "copilot -C " (sq (str role-worktree)) " --name " (sq (agent-name (:instance ctx) display)) " " (extra-args-prefix row) "-i \"$(cat " (sq (str prompt-file)) ")\"")
                   "grok" (str "grok --cwd " (sq (str role-worktree)) " --permission-mode acceptEdits " (extra-args-prefix row) "--rules \"$(cat " (sq (str prompt-file)) ")\" --verbatim \"$(cat " (sq (str prompt-file)) ")\"")))
       (= index 0)
       (str "; exit_code=$?; SWARMFORGE_TERMINAL_BACKEND=" (sq (:terminal-backend ctx))
@@ -345,16 +364,38 @@
         command "Enter")
     (println (str "  " cyan "[" display "]" reset " started in session " session))))
 
+(defn live-handoffd?
+  "True only when pid names a running handoffd process for THIS project. Used to
+  avoid killing a stale/recycled PID that now belongs to an unrelated process or
+  another swarm's daemon. Portable (no /proc dependency)."
+  [ctx pid]
+  (and (re-matches #"[0-9]+" (str pid))
+       (let [{:keys [exit out]} (process/sh {:continue true} "ps" "-p" (str pid) "-o" "args=")]
+         (and (zero? exit)
+              (str/includes? out "handoffd.bb")
+              (str/includes? out (str (:working-dir ctx)))))))
+
 (defn stop-handoff-daemon! [ctx]
   (let [pid-file (fs/path (:daemon-dir ctx) "handoffd.pid")]
     (when (fs/exists? pid-file)
       (let [pid (str/trim (slurp (str pid-file)))]
-        (when (re-matches #"[0-9]+" pid)
-          (process/sh {:continue true} "kill" "-TERM" pid))))))
+        (if (live-handoffd? ctx pid)
+          (do
+            (process/sh {:continue true} "kill" "-TERM" pid)
+            ;; Wait for clean exit so we never overlap with a new daemon.
+            (loop [n 0]
+              (when (and (< n 30) (live-handoffd? ctx pid))
+                (Thread/sleep 100)
+                (recur (inc n)))))
+          ;; Stale or foreign PID: drop the file, never kill blindly.
+          (fs/delete-if-exists pid-file))))))
 
 (defn start-handoff-daemon! [ctx]
   (fs/delete-if-exists (fs/path (:daemon-dir ctx) "stop"))
-  (process/process [(str (fs/path (:script-dir ctx) "handoffd.bb")) (str (:working-dir ctx))]
+  ;; nohup so the daemon survives its launching terminal closing (SIGHUP) and
+  ;; only exits via the stop-file/SIGTERM, instead of dying and orphaning a
+  ;; stale pid-file.
+  (process/process ["nohup" (str (fs/path (:script-dir ctx) "handoffd.bb")) (str (:working-dir ctx))]
                    {:out (str (:handoff-daemon-log ctx))
                     :err :out})
   (println (str green "Started handoff daemon." reset)))
@@ -389,12 +430,12 @@
              index 0
              previous-window-id ""]
         (when-let [row (first rows)]
-          (let [window-id (terminal-call-out ctx "terminal_open_session" (:session row) (str "SwarmForge " (:display-name row)) previous-window-id)]
+          (let [window-id (terminal-call-out ctx "terminal_open_session" (:session row) (agent-name (:instance ctx) (:display-name row)) previous-window-id)]
             (if (terminal-call-ok? ctx "terminal_backend_tracks_windows")
               (do
                 (spit (str (:window-ids-file ctx)) (str window-id "\n") :append true)
                 (spit (str (:window-state-file ctx))
-                      (format "%d\t%s\t%s\t%s\n" (inc index) window-id (:session row) (str "SwarmForge " (:display-name row)))
+                      (format "%d\t%s\t%s\t%s\n" (inc index) window-id (:session row) (agent-name (:instance ctx) (:display-name row)))
                       :append true)
                 (recur (next rows) (inc index) window-id))
               (recur (next rows) (inc index) previous-window-id)))))
@@ -425,6 +466,7 @@
         tmux-socket-dir (fs/path "/tmp" (str "swarmforge-" (or (System/getenv "UID") (System/getProperty "user.name"))))
         tmux-socket (str (fs/path tmux-socket-dir (str socket-id ".sock")))]
     {:working-dir working-dir
+     :instance (instance-tag working-dir)
      :script-dir script-dir
      :swarm-forge-dir swarm-forge-dir
      :worktrees-dir (fs/path working-dir ".worktrees")
@@ -522,10 +564,10 @@
     (println (:tmux-window-base-index ctx) (:tmux-pane-base-index ctx))))
 
 (defn test-launch-command! [root agent & [extra-args]]
-  (let [ctx (assoc (context root) :terminal-backend "none")
+  (let [ctx (assoc (context root) :terminal-backend "none" :instance "test")
         row {:role "coder"
              :agent agent
-             :session "swarmforge-coder"
+             :session "swarmforge-test-coder"
              :display-name "Coder"
              :worktree-name "master"
              :worktree-path (fs/path root)

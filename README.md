@@ -72,7 +72,7 @@ curl -L "https://github.com/garrelj1/swarm-forge/archive/refs/heads/${BRANCH}.ta
 
 Use `BRANCH=two-pack` for the quick two-agent workflow, `BRANCH=four-pack` for the compact specification workflow, or `BRANCH=six-pack` for the full six-agent workflow. Do not use `main` for this command; `main` is documentary and stores the shared operational scripts, while the runnable branches provide the configurations and prompts intended for projects.
 
-After copying a runnable branch, fill in `swarmforge/constitution/stack.prompt` with your project's language, build commands, and quality tools. Then start the swarm:
+After copying a runnable branch, fill in `swarmforge/constitution/articles/stack.prompt` with your project's language, build commands, and quality tools. Then start the swarm:
 
 ```sh
 ./swarm
@@ -92,7 +92,7 @@ To pull the latest framework scripts, `swarm` wrapper, constitution, and role pr
 ./update-swarmforge.sh --pack four-pack   # or six-pack
 ```
 
-This updates `swarmforge/scripts/`, the `swarm` wrapper, and the constitution and role prompts from the specified pack branch. It never overwrites `swarmforge/swarmforge.conf`, `swarmforge/constitution/project.prompt`, or `swarmforge/constitution/stack.prompt` — those are project-specific.
+This updates `swarmforge/scripts/`, the `swarm` wrapper, and the constitution and role prompts from the specified pack branch. It never overwrites `swarmforge/swarmforge.conf`, `swarmforge/constitution/articles/project.prompt`, or `swarmforge/constitution/articles/stack.prompt` — those are project-specific.
 
 If `swarmforge/swarmforge.conf` does not yet exist, it is bootstrapped from the pack branch on first run.
 
