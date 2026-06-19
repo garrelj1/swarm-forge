@@ -17,7 +17,10 @@ SESSIONS_FILE="$STATE_DIR/sessions.tsv"
 [[ -r "$SESSIONS_FILE" ]] || { echo "No sessions file at $SESSIONS_FILE" >&2; exit 1; }
 
 SOCKET="$(<"$SOCKET_FILE")"
-tmux -S "$SOCKET" info >/dev/null 2>&1 || { echo "SwarmForge tmux server not running on $SOCKET" >&2; exit 1; }
+# Probe with list-sessions, not `info`: `tmux info` needs a current client and
+# exits non-zero ("no current client") when run from outside tmux, even though
+# the server is fully up. list-sessions only needs the server to be running.
+tmux -S "$SOCKET" list-sessions >/dev/null 2>&1 || { echo "SwarmForge tmux server not running on $SOCKET" >&2; exit 1; }
 
 # Collect the role sessions that are actually alive (col 3 = session, col 4 = display).
 typeset -a SESSIONS DISPLAYS
