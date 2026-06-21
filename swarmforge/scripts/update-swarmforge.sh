@@ -88,6 +88,24 @@ sync_dir() {
   done < <(find "$src_dir" -type f -print0)
 }
 
+# Sync constitution articles from a source dir, keeping shared framework
+# articles current but never clobbering the project's own project-specific
+# prompts: project.prompt holds the language, stack.prompt the stack. Those two
+# are bootstrapped only when absent; every other article is kept up to date.
+sync_articles() {
+  local src_dir="$1"
+  [[ -d "$src_dir" ]] || return 0
+  local src rel
+  while IFS= read -r -d '' src; do
+    rel="${src#$src_dir/}"
+    if [[ ( "$rel" == "project.prompt" || "$rel" == "stack.prompt" ) \
+          && -f "$WORKING_DIR/swarmforge/constitution/articles/$rel" ]]; then
+      continue
+    fi
+    sync_file "$src" "$WORKING_DIR/swarmforge/constitution/articles/$rel"
+  done < <(find "$src_dir" -type f -print0)
+}
+
 # --- Download main branch ---
 echo -e "${CYAN}Downloading main branch from fork...${RESET}"
 if ! curl -fsSL "$MAIN_URL" | tar -xz --strip-components=1 -C "$TMPDIR_MAIN"; then
@@ -95,8 +113,16 @@ if ! curl -fsSL "$MAIN_URL" | tar -xz --strip-components=1 -C "$TMPDIR_MAIN"; th
   exit 1
 fi
 
-sync_file "$TMPDIR_MAIN/update-swarmforge.sh" "$WORKING_DIR/update-swarmforge.sh"
 sync_dir "$TMPDIR_MAIN/swarmforge/scripts" "$WORKING_DIR/swarmforge/scripts"
+# Keep a top-level update-swarmforge.sh in sync only if the project keeps one
+# (the canonical copy lives under swarmforge/scripts and is synced above).
+if [[ -f "$WORKING_DIR/update-swarmforge.sh" ]]; then
+  sync_file "$TMPDIR_MAIN/swarmforge/scripts/update-swarmforge.sh" "$WORKING_DIR/update-swarmforge.sh"
+fi
+# Framework-shared constitution articles (engineering/handoffs/workflow) and the
+# handoff protocol doc live only on main, so keep them current from here.
+sync_file "$TMPDIR_MAIN/swarmforge/handoff-protocol.md" "$WORKING_DIR/swarmforge/handoff-protocol.md"
+sync_articles "$TMPDIR_MAIN/swarmforge/constitution/articles"
 
 # --- Update swarm wrapper and constitution/role prompts from pack branch ---
 if [[ -n "$PACK" ]]; then
@@ -108,19 +134,9 @@ if [[ -n "$PACK" ]]; then
   fi
   sync_file "$TMPDIR_PACK/swarm" "$WORKING_DIR/swarm"
   sync_file "$TMPDIR_PACK/swarmforge/constitution.prompt" "$WORKING_DIR/swarmforge/constitution.prompt"
-  # Sync shared constitution articles, but never clobber the project's own
-  # project-specific prompts (project.prompt holds the language; stack.prompt the
-  # stack). Bootstrap those only if absent; keep all other articles current.
-  if [[ -d "$TMPDIR_PACK/swarmforge/constitution/articles" ]]; then
-    while IFS= read -r -d '' src; do
-      rel="${src#$TMPDIR_PACK/swarmforge/constitution/articles/}"
-      if [[ ( "$rel" == "project.prompt" || "$rel" == "stack.prompt" ) \
-            && -f "$WORKING_DIR/swarmforge/constitution/articles/$rel" ]]; then
-        continue
-      fi
-      sync_file "$src" "$WORKING_DIR/swarmforge/constitution/articles/$rel"
-    done < <(find "$TMPDIR_PACK/swarmforge/constitution/articles" -type f -print0)
-  fi
+  # Sync the pack's constitution articles (never clobbering project.prompt /
+  # stack.prompt — see sync_articles).
+  sync_articles "$TMPDIR_PACK/swarmforge/constitution/articles"
   sync_dir "$TMPDIR_PACK/swarmforge/roles" "$WORKING_DIR/swarmforge/roles"
   # Bootstrap swarmforge.conf only if it doesn't exist yet
   if [[ ! -f "$WORKING_DIR/swarmforge/swarmforge.conf" ]]; then
