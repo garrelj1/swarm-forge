@@ -35,65 +35,75 @@ done < "$SESSIONS_FILE"
 (( ${#SESSIONS} > 0 )) || { echo "No live SwarmForge sessions found." >&2; exit 1; }
 
 DASH="swarmforge-$(basename "$WORKING_DIR")-dashboard"
-tmux -S "$SOCKET" kill-session -t "$DASH" 2>/dev/null || true
 
-# Nested attach on the same server requires clearing $TMUX in the pane.
-attach_cmd() { echo "TMUX= exec tmux -S '$SOCKET' attach-session -t '$1'"; }
+# If the dashboard is already open (e.g. from another machine/terminal), don't
+# tear it down: kill-session would forcibly disconnect that other client. Only
+# rebuild when nobody is currently watching it.
+if tmux -S "$SOCKET" has-session -t "$DASH" 2>/dev/null \
+  && (( $(tmux -S "$SOCKET" list-clients -t "$DASH" 2>/dev/null | wc -l) > 0 )); then
+  echo "Dashboard '$DASH' is already open elsewhere; attaching as another viewer." >&2
+else
+  tmux -S "$SOCKET" kill-session -t "$DASH" 2>/dev/null || true
 
-# Place pane index $1 (1-based into SESSIONS/DISPLAYS) into tmux pane id $2.
-label_pane() {
-  tmux -S "$SOCKET" select-pane -t "$2" -T "${DISPLAYS[$1]}" >/dev/null 2>&1 || true
-}
+  # Nested attach on the same server requires clearing $TMUX in the pane.
+  attach_cmd() { echo "TMUX= exec tmux -S '$SOCKET' attach-session -t '$1'"; }
 
-typeset -i N=${#SESSIONS}
-typeset -i COLS=${SWARM_DASH_COLS:-3}
-(( COLS < 1 )) && COLS=1
-typeset -i ROWS=$(( (N + COLS - 1) / COLS ))
+  # Place pane index $1 (1-based into SESSIONS/DISPLAYS) into tmux pane id $2.
+  label_pane() {
+    tmux -S "$SOCKET" select-pane -t "$2" -T "${DISPLAYS[$1]}" >/dev/null 2>&1 || true
+  }
 
-# Equal-split percentage for the j-th split (1-based) of a line of K panes.
-split_pct() { echo $(( 100 * ($1 - $2) / ($1 - $2 + 1) )); }
+  typeset -i N=${#SESSIONS}
+  typeset -i COLS=${SWARM_DASH_COLS:-3}
+  (( COLS < 1 )) && COLS=1
+  typeset -i ROWS=$(( (N + COLS - 1) / COLS ))
 
-# First pane = row 1, col 1.
-tmux -S "$SOCKET" new-session -d -s "$DASH" -n swarm "$(attach_cmd "${SESSIONS[1]}")"
-typeset -a ROWSTART
-ROWSTART[1]="$(tmux -S "$SOCKET" display-message -p -t "$DASH" '#{pane_id}')"
-label_pane 1 "${ROWSTART[1]}"
+  # Equal-split percentage for the j-th split (1-based) of a line of K panes.
+  split_pct() { echo $(( 100 * ($1 - $2) / ($1 - $2 + 1) )); }
 
-# Build the left column: one pane per row, stacked vertically and equalized.
-typeset -i r c idx pct
-for (( r=2; r<=ROWS; r++ )); do
-  idx=$(( (r-1)*COLS + 1 ))
-  pct=$(split_pct "$ROWS" $(( r-1 )))
-  ROWSTART[$r]="$(tmux -S "$SOCKET" split-window -v -t "${ROWSTART[$((r-1))]}" -l "${pct}%" \
-    -P -F '#{pane_id}' "$(attach_cmd "${SESSIONS[$idx]}")")"
-  label_pane "$idx" "${ROWSTART[$r]}"
-done
+  # First pane = row 1, col 1.
+  tmux -S "$SOCKET" new-session -d -s "$DASH" -n swarm "$(attach_cmd "${SESSIONS[1]}")"
+  typeset -a ROWSTART
+  ROWSTART[1]="$(tmux -S "$SOCKET" display-message -p -t "$DASH" '#{pane_id}')"
+  label_pane 1 "${ROWSTART[1]}"
 
-# Fill each row out to COLS columns (or fewer for a short final row).
-typeset rowcols prev newid base
-for (( r=1; r<=ROWS; r++ )); do
-  base=$(( (r-1)*COLS + 1 ))
-  rowcols=$(( N - base + 1 )); (( rowcols > COLS )) && rowcols=$COLS
-  prev="${ROWSTART[$r]}"
-  for (( c=2; c<=rowcols; c++ )); do
-    idx=$(( base + c - 1 ))
-    pct=$(split_pct "$rowcols" $(( c-1 )))
-    newid="$(tmux -S "$SOCKET" split-window -h -t "$prev" -l "${pct}%" \
+  # Build the left column: one pane per row, stacked vertically and equalized.
+  typeset -i r c idx pct
+  for (( r=2; r<=ROWS; r++ )); do
+    idx=$(( (r-1)*COLS + 1 ))
+    pct=$(split_pct "$ROWS" $(( r-1 )))
+    ROWSTART[$r]="$(tmux -S "$SOCKET" split-window -v -t "${ROWSTART[$((r-1))]}" -l "${pct}%" \
       -P -F '#{pane_id}' "$(attach_cmd "${SESSIONS[$idx]}")")"
-    label_pane "$idx" "$newid"
-    prev="$newid"
+    label_pane "$idx" "${ROWSTART[$r]}"
   done
-done
 
-# Show role names (pane titles) in the pane borders; mouse on for click-to-focus.
-tmux -S "$SOCKET" set-option -t "$DASH" pane-border-status top >/dev/null 2>&1 || true
-tmux -S "$SOCKET" set-option -t "$DASH" pane-border-format ' #{pane_title} ' >/dev/null 2>&1 || true
-tmux -S "$SOCKET" set-option -t "$DASH" mouse on >/dev/null 2>&1 || true
-# Ctrl-b m toggles mouse: off = wheel scrolls the focused agent natively; on = click-to-focus.
-tmux -S "$SOCKET" bind-key m set-option -g mouse \; \
-  display-message 'mouse #{?mouse,on (click panes),off (scroll agents)}' >/dev/null 2>&1 || true
+  # Fill each row out to COLS columns (or fewer for a short final row).
+  typeset rowcols prev newid base
+  for (( r=1; r<=ROWS; r++ )); do
+    base=$(( (r-1)*COLS + 1 ))
+    rowcols=$(( N - base + 1 )); (( rowcols > COLS )) && rowcols=$COLS
+    prev="${ROWSTART[$r]}"
+    for (( c=2; c<=rowcols; c++ )); do
+      idx=$(( base + c - 1 ))
+      pct=$(split_pct "$rowcols" $(( c-1 )))
+      newid="$(tmux -S "$SOCKET" split-window -h -t "$prev" -l "${pct}%" \
+        -P -F '#{pane_id}' "$(attach_cmd "${SESSIONS[$idx]}")")"
+      label_pane "$idx" "$newid"
+      prev="$newid"
+    done
+  done
 
-echo "Dashboard '$DASH' built with ${#SESSIONS} panes: ${DISPLAYS[*]}"
+  # Show role names (pane titles) in the pane borders; mouse on for click-to-focus.
+  tmux -S "$SOCKET" set-option -t "$DASH" pane-border-status top >/dev/null 2>&1 || true
+  tmux -S "$SOCKET" set-option -t "$DASH" pane-border-format ' #{pane_title} ' >/dev/null 2>&1 || true
+  tmux -S "$SOCKET" set-option -t "$DASH" mouse on >/dev/null 2>&1 || true
+  # Ctrl-b m toggles mouse: off = wheel scrolls the focused agent natively; on = click-to-focus.
+  tmux -S "$SOCKET" bind-key m set-option -g mouse \; \
+    display-message 'mouse #{?mouse,on (click panes),off (scroll agents)}' >/dev/null 2>&1 || true
+
+  echo "Dashboard '$DASH' built with ${#SESSIONS} panes: ${DISPLAYS[*]}"
+fi
+
 if [[ -n "${TMUX:-}" ]]; then
   echo "You're inside tmux; switch with:  tmux -S '$SOCKET' switch-client -t '$DASH'"
 else
