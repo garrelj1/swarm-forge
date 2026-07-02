@@ -25,7 +25,7 @@
 (def pid-file (fs/path daemon-dir "handoffd.pid"))
 (def stop-file (fs/path daemon-dir "stop"))
 (def log-file (fs/path daemon-dir "handoffd.log"))
-(def stopping? (atom false))
+(def stopping-flag (atom false))
 
 (defn now []
   (.format (java.time.format.DateTimeFormatter/ISO_INSTANT)
@@ -151,22 +151,38 @@
                          (str/ends-with? (fs/file-name %) ".handoff")))
            (sort-by #(fs/file-name %))))))
 
+(defn should-stop? []
+  (or @stopping-flag (fs/exists? stop-file)))
+
+(defn sleep-poll! [ms]
+  (loop [remaining ms]
+    (when (and (pos? remaining) (not (should-stop?)))
+      (let [step (min remaining 100)]
+        (Thread/sleep step)
+        (recur (- remaining step))))))
+
 (defn poll-once! []
-  (let [roles (load-roles)
-        socket (str/trim (slurp (str socket-file)))]
-    (doseq [[role role-info] roles
-            path (or (outbox-files role-info) [])]
-      (try
-        (deliver! roles socket role path)
-        (catch Exception e
-          (log! "error" (str path) (.getMessage e))
-          (try
-            (fail! path (.getMessage e))
-            (catch Exception nested
-              (log! "failed-to-archive" (str path) (.getMessage nested)))))))))
+  (when-not (should-stop?)
+    (let [roles (load-roles)
+          socket (str/trim (slurp (str socket-file)))]
+      (doseq [[role role-info] roles
+              path (or (outbox-files role-info) [])
+              :while (not (should-stop?))]
+        (try
+          (deliver! roles socket role path)
+          (catch Exception e
+            (log! "error" (str path) (.getMessage e))
+            (try
+              (fail! path (.getMessage e))
+              (catch Exception nested
+                (log! "failed-to-archive" (str path) (.getMessage nested))))))))))
 
 (defn shutdown! []
-  (reset! stopping? true))
+  (reset! stopping-flag true)
+  (try
+    (fs/delete-if-exists pid-file)
+    (log! "stopped")
+    (catch Exception _ nil)))
 
 (defn live-handoffd?
   "True only when pid names a running handoffd for THIS project root. Lets the
@@ -200,9 +216,9 @@
   (.addShutdownHook (Runtime/getRuntime) (Thread. shutdown!))
   (log! "started")
   (try
-    (while (and (not @stopping?) (not (fs/exists? stop-file)))
+    (while (not (should-stop?))
       (poll-once!)
-      (Thread/sleep poll-ms))
+      (sleep-poll! poll-ms))
     (finally
       (fs/delete-if-exists pid-file)
       (log! "stopped"))))
