@@ -239,6 +239,26 @@
       (is (every? #(some? (header % "completed_at"))
                   (fs/glob completed-batch "*.handoff"))))))
 
+(deftest stop-handoff-daemon-stops-running-process-and-removes-pid-file
+  (let [root (tmp-dir)]
+    (init-repo! root)
+    (fs/create-dirs (fs/path root ".swarmforge/daemon"))
+    (write-file (fs/path root ".swarmforge/roles.tsv")
+                (str "coder\tmaster\t" root "\tsession\tCoder\tcodex\ttask\n"))
+    (write-file (fs/path root ".swarmforge/tmux-socket") "/tmp/fake.sock\n")
+    (run {:dir root :ok? false}
+         "sh" "-c"
+         (str "bb " (script "handoffd.bb") " " root " >/dev/null 2>&1 &"))
+    (Thread/sleep 1500)
+    (let [pid-file (fs/path root ".swarmforge/daemon/handoffd.pid")]
+      (is (fs/exists? pid-file))
+      (let [pid (str/trim (read-file pid-file))
+            stop (run {:dir root} (script "stop_handoff_daemon.bb") (str root))]
+        (is (= 0 (:exit stop)))
+        (Thread/sleep 300)
+        (is (not (fs/exists? pid-file)))
+        (is (not= 0 (:exit (run {:dir root :ok? false} "kill" "-0" pid))))))))
+
 (deftest helpers-refuse-wrong-current-work-shape
   (let [root (tmp-dir)
         batch (fs/path root ".swarmforge/handoffs/inbox/in_process/batch_20260615T000001Z_000001")]

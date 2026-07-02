@@ -57,7 +57,13 @@
 (defn kill-session! [tmux-socket session]
   (process/sh {:continue true} "tmux" "-S" tmux-socket "kill-session" "-t" session))
 
+(defn stop-handoff-daemon! [script-dir working-dir]
+  (process/sh {:continue true}
+              "bb" (str (fs/path script-dir "stop_handoff_daemon.bb"))
+              (str working-dir)))
+
 (defn kill-all-sessions! [script-dir window-state-file working-dir tmux-socket backend]
+  (stop-handoff-daemon! script-dir working-dir)
   (doseq [{:keys [session]} (rows window-state-file)]
     (when-not (str/blank? session)
       (kill-session! tmux-socket session)))
