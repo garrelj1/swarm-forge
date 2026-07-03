@@ -280,27 +280,32 @@
       (finally
         (fs/delete-tree root)))))
 
+(def bell "")
+
 (deftest notify-host-emits-bell-and-exits-zero
   (doseq [event ["needs-input" "task-done" "error" "unknown-event"]]
     (let [result (run {:dir repo-root} (script "notify-host.sh") event)]
       (is (= 0 (:exit result)) (str "event: " event))
-      (is (str/includes? (:out result) "") (str "event: " event)))))
+      (is (str/includes? (:out result) bell) (str "event: " event)))))
 
 (deftest notify-host-exits-zero-with-no-args
   (let [result (run {:dir repo-root} (script "notify-host.sh"))]
     (is (= 0 (:exit result)))
-    (is (str/includes? (:out result) ""))))
+    (is (str/includes? (:out result) bell))))
 
 (deftest notify-host-tolerates-missing-sound-players
-  (let [stub-bin (fs/create-temp-dir {:prefix "swarmforge-notify-stub-bin."})]
+  (let [stub-bin (fs/create-temp-dir {:prefix "swarmforge-notify-stub-bin."})
+        zsh-path (str/trim (:out (sh/sh "which" "zsh")))]
     (try
-      ;; A PATH with only enough to run the shebang/builtins, no afplay/paplay/aplay.
+      ;; A PATH with just zsh (so the #!/usr/bin/env zsh shebang still
+      ;; resolves) and a stub true, but no afplay/paplay/aplay.
       (write-file (fs/path stub-bin "true") "#!/bin/sh\nexit 0\n")
       (fs/set-posix-file-permissions (fs/path stub-bin "true") "rwxr-xr-x")
+      (fs/create-sym-link (fs/path stub-bin "zsh") zsh-path)
       (let [result (run {:dir repo-root :env {"PATH" (str stub-bin)}}
                         (script "notify-host.sh") "needs-input")]
         (is (= 0 (:exit result)))
-        (is (str/includes? (:out result) "")))
+        (is (str/includes? (:out result) bell)))
       (finally
         (fs/delete-tree stub-bin)))))
 

@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/usr/bin/env zsh
 # Provider-agnostic host notification: terminal bell + best-effort sound.
 # Usage: notify-host.sh <needs-input|task-done|error>
 # Never fails the caller: swallows all errors and always exits 0, because a
