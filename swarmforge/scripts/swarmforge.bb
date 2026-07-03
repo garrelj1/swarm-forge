@@ -244,7 +244,7 @@
    "ready_for_next_batch.sh" "ready_for_next_batch.bb"
    "done_with_current_batch.sh" "done_with_current_batch.bb"
    "handoffd.bb" "swarm-cleanup.sh" "swarm-window-watchdog.sh" "swarm-window-watchdog.bb"
-   "swarm-terminal-adapter.sh" "swarmforge.sh" "swarmforge.bb"])
+   "swarm-terminal-adapter.sh" "swarmforge.sh" "swarmforge.bb" "notify-host.sh"])
 
 (def terminal-helpers
   ["terminal-app.sh" "iterm2.sh" "ghostty.sh" "windows-terminal.sh" "none.sh"])
@@ -570,6 +570,7 @@
 (defn test-parse! [root]
   (let [ctx (prepare-ctx (context root))]
     (prepare-workspace! ctx)
+    (prepare-notification-hooks! ctx)
     (doseq [row (:roles ctx)]
       (println (str (:role row) " " (:display-name row) " " (:worktree-path row) " "
                     (:receive-mode row)
@@ -605,6 +606,7 @@
           (create-role-session! ctx (:session row) (:display-name row)))
         (write-tmux-env-file! ctx)
         (sync-worktree-scripts! ctx)
+        (prepare-notification-hooks! ctx)
         (start-handoff-daemon! ctx)
         (println (str green "Starting agents..." reset))
         (let [delay-ms (env-long "SWARMFORGE_AGENT_START_DELAY_MS" 1500)]

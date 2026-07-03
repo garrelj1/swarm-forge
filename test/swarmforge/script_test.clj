@@ -443,3 +443,31 @@
         (is (= contents (slurp (str settings-file)))))
       (finally
         (fs/delete-tree root)))))
+
+(deftest swarmforge-wires-hooks-only-for-claude-roles
+  (let [root (tmp-dir)]
+    (try
+      (write-file (fs/path root "swarmforge/constitution.prompt") "Read articles.\n")
+      (write-file (fs/path root "swarmforge/swarmforge.conf")
+                  (str "window architect claude master\n"
+                       "window coder codex master\n"))
+      (write-file (fs/path root "swarmforge/roles/architect.prompt") "architect\n")
+      (write-file (fs/path root "swarmforge/roles/coder.prompt") "coder\n")
+      (run {:dir root} (script "swarmforge.bb") "--test-parse" (str root))
+      (is (fs/exists? (fs/path root ".claude" "settings.json")))
+      (let [settings (read-settings root)]
+        (is (contains? (:hooks settings) :Stop)))
+      (finally
+        (fs/delete-tree root)))))
+
+(deftest swarmforge-skips-hooks-when-notifications-disabled
+  (let [root (tmp-dir)]
+    (try
+      (write-file (fs/path root "swarmforge/constitution.prompt") "Read articles.\n")
+      (write-file (fs/path root "swarmforge/swarmforge.conf") "window architect claude master\n")
+      (write-file (fs/path root "swarmforge/roles/architect.prompt") "architect\n")
+      (run {:dir root :env {"SWARMFORGE_NOTIFICATIONS" "off"}}
+           (script "swarmforge.bb") "--test-parse" (str root))
+      (is (not (fs/exists? (fs/path root ".claude" "settings.json"))))
+      (finally
+        (fs/delete-tree root)))))
