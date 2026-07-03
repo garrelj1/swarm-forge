@@ -280,6 +280,30 @@
       (finally
         (fs/delete-tree root)))))
 
+(deftest notify-host-emits-bell-and-exits-zero
+  (doseq [event ["needs-input" "task-done" "error" "unknown-event"]]
+    (let [result (run {:dir repo-root} (script "notify-host.sh") event)]
+      (is (= 0 (:exit result)) (str "event: " event))
+      (is (str/includes? (:out result) "") (str "event: " event)))))
+
+(deftest notify-host-exits-zero-with-no-args
+  (let [result (run {:dir repo-root} (script "notify-host.sh"))]
+    (is (= 0 (:exit result)))
+    (is (str/includes? (:out result) ""))))
+
+(deftest notify-host-tolerates-missing-sound-players
+  (let [stub-bin (fs/create-temp-dir {:prefix "swarmforge-notify-stub-bin."})]
+    (try
+      ;; A PATH with only enough to run the shebang/builtins, no afplay/paplay/aplay.
+      (write-file (fs/path stub-bin "true") "#!/bin/sh\nexit 0\n")
+      (fs/set-posix-file-permissions (fs/path stub-bin "true") "rwxr-xr-x")
+      (let [result (run {:dir repo-root :env {"PATH" (str stub-bin)}}
+                        (script "notify-host.sh") "needs-input")]
+        (is (= 0 (:exit result)))
+        (is (str/includes? (:out result) "")))
+      (finally
+        (fs/delete-tree stub-bin)))))
+
 (deftest swarmforge-namespaces-sessions-by-instance
   (let [root (tmp-dir)]
     (try
