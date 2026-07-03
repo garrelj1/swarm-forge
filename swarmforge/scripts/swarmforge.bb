@@ -248,6 +248,15 @@
 (def terminal-helpers
   ["terminal-app.sh" "iterm2.sh" "ghostty.sh" "windows-terminal.sh" "none.sh"])
 
+(def hook-capable-agents
+  "Agents whose CLI exposes a hook mechanism we can wire host notifications
+  into. Agents not in this set are simply skipped — no polling, no
+  heuristics, no cooperation required from CLIs that can't offer it."
+  #{"claude"})
+
+(defn notifications-enabled? []
+  (not= "off" (str/lower-case (or (System/getenv "SWARMFORGE_NOTIFICATIONS") "on"))))
+
 (defn check-helper-scripts! [ctx]
   (doseq [helper required-helpers]
     (let [path (fs/path (:script-dir ctx) helper)]
@@ -585,6 +594,7 @@
                                      (drop 2 args))
     "--test-agent-start-delay" (println (env-long "SWARMFORGE_AGENT_START_DELAY_MS" 1500))
     "--test-tmux-base-indexes" (test-tmux-base-indexes! (second args))
+    "--test-notifications-enabled" (println (notifications-enabled?))
     (run-main! (or (first args) (System/getProperty "user.dir")))))
 
 (apply -main *command-line-args*)

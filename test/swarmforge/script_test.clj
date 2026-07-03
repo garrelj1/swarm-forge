@@ -182,6 +182,16 @@
     (is (= "2750" (str/trim (:out configured-result))))
     (is (= "1500" (str/trim (:out invalid-result))))))
 
+(deftest swarmforge-notifications-toggle-defaults-on
+  (let [default-result (run {:dir repo-root} (script "swarmforge.bb") "--test-notifications-enabled")
+        off-result (run {:dir repo-root :env {"SWARMFORGE_NOTIFICATIONS" "off"}}
+                        (script "swarmforge.bb") "--test-notifications-enabled")
+        on-result (run {:dir repo-root :env {"SWARMFORGE_NOTIFICATIONS" "on"}}
+                       (script "swarmforge.bb") "--test-notifications-enabled")]
+    (is (= "true" (str/trim (:out default-result))))
+    (is (= "false" (str/trim (:out off-result))))
+    (is (= "true" (str/trim (:out on-result))))))
+
 (deftest swarmforge-launcher-parses-extra-cli-args
   (let [root (tmp-dir)]
     (try
