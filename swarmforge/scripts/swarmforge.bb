@@ -3,6 +3,7 @@
 (ns swarmforge
   (:require [babashka.fs :as fs]
             [babashka.process :as process]
+            [cheshire.core :as json]
             [clojure.string :as str]))
 
 (def session-prefix "swarmforge")
@@ -256,6 +257,54 @@
 
 (defn notifications-enabled? []
   (not= "off" (str/lower-case (or (System/getenv "SWARMFORGE_NOTIFICATIONS") "on"))))
+
+(defn notify-host-command [worktree-path event]
+  ;; Quote the (potentially space-containing) directory but leave the fixed,
+  ;; space-free "notify-host.sh" filename unquoted and adjacent to it — shell
+  ;; concatenates a quoted string immediately followed by unquoted characters
+  ;; into a single token, so this stays a valid, safely-quoted command.
+  (str (sq (str (fs/path worktree-path "swarmforge" "scripts"))) "/notify-host.sh " event))
+
+(defn claude-hook-groups [worktree-path]
+  {:Notification [{:matcher "permission_prompt|idle_prompt"
+                   :hooks [{:type "command" :command (notify-host-command worktree-path "needs-input")}]}]
+   :Stop [{:hooks [{:type "command" :command (notify-host-command worktree-path "task-done")}]}]
+   :PostToolUseFailure [{:hooks [{:type "command" :command (notify-host-command worktree-path "error")}]}]})
+
+(defn merge-hook-event [existing-hooks event group]
+  (let [current (vec (get existing-hooks event []))]
+    (assoc existing-hooks event
+           (if (some #(= % group) current) current (conj current group)))))
+
+(defn merge-claude-settings [settings worktree-path]
+  (let [our-groups (claude-hook-groups worktree-path)
+        existing-hooks (get settings :hooks {})]
+    (assoc settings :hooks
+           (reduce-kv (fn [hooks event group-vec]
+                        (reduce #(merge-hook-event %1 event %2) hooks group-vec))
+                      existing-hooks
+                      our-groups))))
+
+(defn ensure-claude-hook-settings! [worktree-path]
+  (let [settings-file (fs/path worktree-path ".claude" "settings.json")
+        existing (when (fs/exists? settings-file)
+                   (try
+                     (json/parse-string (slurp (str settings-file)) true)
+                     (catch Exception _
+                       ::malformed)))]
+    (if (= existing ::malformed)
+      (binding [*out* *err*]
+        (println (str yellow "Warning:" reset " " settings-file " is not valid JSON; skipping hook wiring.")))
+      (do
+        (fs/create-dirs (fs/parent settings-file))
+        (spit (str settings-file)
+              (json/generate-string (merge-claude-settings (or existing {}) worktree-path) {:pretty true}))))))
+
+(defn prepare-notification-hooks! [ctx]
+  (when (notifications-enabled?)
+    (doseq [row (:roles ctx)
+            :when (contains? hook-capable-agents (:agent row))]
+      (ensure-claude-hook-settings! (:worktree-path row)))))
 
 (defn check-helper-scripts! [ctx]
   (doseq [helper required-helpers]
@@ -595,6 +644,7 @@
     "--test-agent-start-delay" (println (env-long "SWARMFORGE_AGENT_START_DELAY_MS" 1500))
     "--test-tmux-base-indexes" (test-tmux-base-indexes! (second args))
     "--test-notifications-enabled" (println (notifications-enabled?))
+    "--test-ensure-claude-hooks" (ensure-claude-hook-settings! (second args))
     (run-main! (or (first args) (System/getProperty "user.dir")))))
 
 (apply -main *command-line-args*)

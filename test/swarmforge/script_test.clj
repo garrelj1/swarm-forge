@@ -1,6 +1,7 @@
 (ns swarmforge.script-test
   (:require [babashka.fs :as fs]
             [babashka.process :as p]
+            [cheshire.core :as json]
             [clojure.java.shell :as sh]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]))
@@ -357,4 +358,63 @@
           "cleanup must not TERM a non-handoffd PID")
       (finally
         (p/destroy victim)
+        (fs/delete-tree root)))))
+
+(defn read-settings [root]
+  (json/parse-string (slurp (str (fs/path root ".claude" "settings.json"))) true))
+
+(deftest claude-hooks-merged-into-empty-worktree
+  (let [root (tmp-dir)]
+    (try
+      (run {:dir root} (script "swarmforge.bb") "--test-ensure-claude-hooks" (str root))
+      (let [settings (read-settings root)
+            notification (first (get-in settings [:hooks :Notification]))
+            stop (first (get-in settings [:hooks :Stop]))
+            failure (first (get-in settings [:hooks :PostToolUseFailure]))]
+        (is (= "permission_prompt|idle_prompt" (:matcher notification)))
+        (is (str/includes? (get-in notification [:hooks 0 :command]) "notify-host.sh needs-input"))
+        (is (str/includes? (get-in stop [:hooks 0 :command]) "notify-host.sh task-done"))
+        (is (str/includes? (get-in failure [:hooks 0 :command]) "notify-host.sh error")))
+      (finally
+        (fs/delete-tree root)))))
+
+(deftest claude-hooks-merge-preserves-existing-settings
+  (let [root (tmp-dir)]
+    (try
+      (write-file (fs/path root ".claude" "settings.json")
+                  (json/generate-string
+                   {:permissions {:allow ["Bash(npm run *)"]}
+                    :hooks {:Notification [{:matcher "auth_success"
+                                             :hooks [{:type "command" :command "echo mine"}]}]}}))
+      (run {:dir root} (script "swarmforge.bb") "--test-ensure-claude-hooks" (str root))
+      (let [settings (read-settings root)]
+        (is (= ["Bash(npm run *)"] (get-in settings [:permissions :allow])))
+        (is (= 2 (count (get-in settings [:hooks :Notification]))))
+        (is (some #(= "echo mine" (get-in % [:hooks 0 :command]))
+                  (get-in settings [:hooks :Notification]))))
+      (finally
+        (fs/delete-tree root)))))
+
+(deftest claude-hooks-merge-is-idempotent
+  (let [root (tmp-dir)]
+    (try
+      (run {:dir root} (script "swarmforge.bb") "--test-ensure-claude-hooks" (str root))
+      (run {:dir root} (script "swarmforge.bb") "--test-ensure-claude-hooks" (str root))
+      (let [settings (read-settings root)]
+        (is (= 1 (count (get-in settings [:hooks :Notification]))))
+        (is (= 1 (count (get-in settings [:hooks :Stop]))))
+        (is (= 1 (count (get-in settings [:hooks :PostToolUseFailure])))))
+      (finally
+        (fs/delete-tree root)))))
+
+(deftest claude-hooks-merge-skips-on-malformed-json
+  (let [root (tmp-dir)
+        settings-file (fs/path root ".claude" "settings.json")]
+    (try
+      (write-file settings-file "{not valid json")
+      (let [result (run {:dir root} (script "swarmforge.bb") "--test-ensure-claude-hooks" (str root))]
+        (is (= 0 (:exit result)))
+        (is (str/includes? (:err result) "skipping hook wiring"))
+        (is (= "{not valid json" (slurp (str settings-file)))))
+      (finally
         (fs/delete-tree root)))))
