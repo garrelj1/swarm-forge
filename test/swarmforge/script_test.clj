@@ -418,3 +418,28 @@
         (is (= "{not valid json" (slurp (str settings-file)))))
       (finally
         (fs/delete-tree root)))))
+
+(deftest claude-hooks-merge-skips-on-non-map-top-level
+  (let [root (tmp-dir)
+        settings-file (fs/path root ".claude" "settings.json")]
+    (try
+      (write-file settings-file "[]")
+      (let [result (run {:dir root} (script "swarmforge.bb") "--test-ensure-claude-hooks" (str root))]
+        (is (= 0 (:exit result)))
+        (is (str/includes? (:err result) "skipping hook wiring"))
+        (is (= "[]" (slurp (str settings-file)))))
+      (finally
+        (fs/delete-tree root)))))
+
+(deftest claude-hooks-merge-skips-on-non-map-hooks-value
+  (let [root (tmp-dir)
+        settings-file (fs/path root ".claude" "settings.json")
+        contents (json/generate-string {:hooks "oops"})]
+    (try
+      (write-file settings-file contents)
+      (let [result (run {:dir root} (script "swarmforge.bb") "--test-ensure-claude-hooks" (str root))]
+        (is (= 0 (:exit result)))
+        (is (str/includes? (:err result) "skipping hook wiring"))
+        (is (= contents (slurp (str settings-file)))))
+      (finally
+        (fs/delete-tree root)))))

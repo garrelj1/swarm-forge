@@ -285,16 +285,30 @@
                       existing-hooks
                       our-groups))))
 
+(defn wrong-shape-claude-settings?
+  "True when parsed JSON isn't usable as Claude settings: the top level isn't
+  a map, or it has a :hooks key that isn't itself a map. Syntactically valid
+  JSON can still have either shape (e.g. a bare `[]`, or `{\"hooks\": \"oops\"}`),
+  and we want to treat that the same as unparseable JSON rather than crashing
+  later in merge-claude-settings/merge-hook-event."
+  [parsed]
+  (and (some? parsed)
+       (or (not (map? parsed))
+           (and (contains? parsed :hooks) (not (map? (:hooks parsed)))))))
+
 (defn ensure-claude-hook-settings! [worktree-path]
   (let [settings-file (fs/path worktree-path ".claude" "settings.json")
-        existing (when (fs/exists? settings-file)
-                   (try
-                     (json/parse-string (slurp (str settings-file)) true)
-                     (catch Exception _
-                       ::malformed)))]
+        parsed (when (fs/exists? settings-file)
+                 (try
+                   (json/parse-string (slurp (str settings-file)) true)
+                   (catch Exception _
+                     ::malformed)))
+        existing (if (or (= parsed ::malformed) (wrong-shape-claude-settings? parsed))
+                   ::malformed
+                   parsed)]
     (if (= existing ::malformed)
       (binding [*out* *err*]
-        (println (str yellow "Warning:" reset " " settings-file " is not valid JSON; skipping hook wiring.")))
+        (println (str yellow "Warning:" reset " " settings-file " is not valid or usable JSON; skipping hook wiring.")))
       (do
         (fs/create-dirs (fs/parent settings-file))
         (spit (str settings-file)
