@@ -270,6 +270,18 @@ If a window uses `master` as its worktree name, SwarmForge does not create `.wor
 
 SwarmForge uses a project-specific tmux socket recorded in `.swarmforge/tmux-socket`, so each project swarm is isolated from other tmux sessions. It also honors tmux `base-index` and `pane-base-index` settings when launching agents and sending notifications, so configurations that number windows or panes from `1` work without requiring users to change their tmux preferences.
 
+## Host Notifications
+
+SwarmForge beeps the host terminal (bell + best-effort system sound) when a Claude Code agent needs input, finishes a task, or hits a tool failure. This uses Claude Code's own hooks (`Notification`, `Stop`, `PostToolUseFailure`) wired into each Claude worktree's `.claude/settings.json` at launch time — existing settings and hooks are preserved, not overwritten.
+
+Only agents whose CLI exposes a hook mechanism are wired up; today that's `claude` only. `codex`/`copilot`/`grok` roles are skipped without error.
+
+Disable notifications entirely with:
+
+```sh
+SWARMFORGE_NOTIFICATIONS=off ./swarm
+```
+
 ## Terminal Behavior
 
 SwarmForge opens trackable terminal windows or tabs through a small terminal backend adapter.
