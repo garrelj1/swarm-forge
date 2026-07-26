@@ -123,6 +123,9 @@ fi
 # handoff protocol doc live only on main, so keep them current from here.
 sync_file "$TMPDIR_MAIN/swarmforge/handoff-protocol.md" "$WORKING_DIR/swarmforge/handoff-protocol.md"
 sync_articles "$TMPDIR_MAIN/swarmforge/constitution/articles"
+# The PM runs outside the swarm and is pack-independent, so its prompt lives on
+# main and is kept current from here regardless of the selected pack.
+sync_file "$TMPDIR_MAIN/swarmforge/roles/PM.prompt" "$WORKING_DIR/swarmforge/roles/PM.prompt"
 
 # --- Update swarm wrapper and constitution/role prompts from pack branch ---
 if [[ -n "$PACK" ]]; then
