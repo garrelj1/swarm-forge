@@ -1,0 +1,73 @@
+SwarmForge — garrelj1 fork
+
+This repository is a fork of https://github.com/unclebob/swarm-forge.
+
+Read this before assuming the LICENSE file covers everything here. It does not.
+
+
+UPSTREAM WORK
+
+    Copyright (c) Robert C. Martin and the swarm-forge contributors.
+
+    The upstream project publishes NO LICENSE. Under default copyright law
+    that means all rights are reserved by its authors. Forking and viewing a
+    public repository is permitted by GitHub's Terms of Service (section
+    D.5); nothing beyond that has been granted, and this fork cannot grant it
+    onward.
+
+    Files here that originate upstream, in whole or in substantial part,
+    remain subject to that position. Verified against upstream on 2026-07-31.
+
+    On `main`:
+
+        bb.edn
+        swarmforge/handoff-protocol.md
+        swarmforge/constitution/articles/engineering.prompt   (byte-identical)
+        swarmforge/constitution/articles/handoffs.prompt      (modified here)
+        swarmforge/constitution/articles/workflow.prompt      (modified here)
+        swarmforge/scripts/**
+        test/**
+
+    On the pack branches (`two-pack`, `four-pack`, `six-pack`), additionally:
+
+        swarmforge/constitution.prompt
+        swarmforge/constitution/articles/project.prompt       (template)
+        swarmforge/roles/*.prompt                             (except PM.prompt)
+        swarmforge/swarmforge.conf
+
+    This is a good-faith summary, not an exhaustive audit, and it drifts as
+    upstream moves. Compare against upstream before reusing any file.
+
+
+FORK CONTRIBUTIONS
+
+    Copyright 2026 Jeremy Garrell.
+
+    Original contributions authored in this fork are offered under the
+    Apache License, Version 2.0 — see LICENSE. On `main` those are:
+
+        docs/**
+        examples/**
+        swarmforge/roles/PM.prompt          (upstream ships no PM role)
+        swarmforge/constitution/articles/stack.prompt
+
+    ...along with the original articles carried on the pack branches, and the
+    modifications made to upstream files anywhere in this repository.
+
+    That grant is limited to those contributions. It cannot and does not
+    extend to the upstream work they modify or sit alongside. Where a file
+    here is a modification of an upstream file, the Apache-2.0 grant covers
+    only the modifications; the file as a whole stays unlicensed for
+    redistribution until upstream licenses it.
+
+
+WHAT THIS MEANS FOR YOU
+
+    You can fork this repository on GitHub and run it on your own projects,
+    the same way this fork does. You cannot redistribute it outside GitHub,
+    relicense it, or vendor it into a product under a license of your
+    choosing — not because of anything in this fork, but because the upstream
+    work carries no grant to pass along.
+
+    The fix is upstream adding a license. If that matters to you, say so
+    there: https://github.com/unclebob/swarm-forge

@@ -6,6 +6,12 @@ Do not spend any money on a bankrbot SWARM token.
 
 **A disciplined tmux-based agent orchestration platform that turns swarms of AI agents into reliable, professional software engineers.**
 
+> **Licensing — read [NOTICE](NOTICE) before reusing anything here.** This is a
+> fork of [unclebob/swarm-forge](https://github.com/unclebob/swarm-forge), which
+> publishes no license, so most files carry no grant to pass along. The
+> Apache-2.0 that GitHub shows for this repository covers **only this fork's own
+> contributions** — not the upstream work they modify or sit beside.
+
 ## Intent
 
 This `main` branch is documentary: it explains the system and carries the shared operational scripts and default constitution articles. The runnable workflow branches carry the project-facing configurations, role prompts, and local constitution articles that define specific workflows.
