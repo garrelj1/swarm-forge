@@ -1,8 +1,8 @@
 # Project Rules
 
 ## Project Shape
-- This project is configured for SwarmForge with six Codex-backed agents: specifier, coder, cleaner, architect, hardener, and QA.
-- Project language: Babashka.
+- This project is configured for SwarmForge with six agents: specifier, coder, cleaner, architect, hardener, and QA. See `swarmforge/swarmforge.conf` for the agent backend.
+- Project language: <language, e.g. Go>
 
 ## Local Configuration
 - Preserve project-local SwarmForge configuration under `swarmforge/`.
