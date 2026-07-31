@@ -26,7 +26,8 @@ usage() {
   echo ""
   echo "Never overwritten (project-specific): swarmforge/swarmforge.conf,"
   echo "               swarmforge/constitution/articles/project.prompt,"
-  echo "               swarmforge/constitution/articles/stack.prompt"
+  echo "               swarmforge/constitution/articles/stack.prompt,"
+  echo "               swarmforge/constitution/articles/local-*.prompt"
   exit 1
 }
 
@@ -90,15 +91,18 @@ sync_dir() {
 
 # Sync constitution articles from a source dir, keeping shared framework
 # articles current but never clobbering the project's own project-specific
-# prompts: project.prompt holds the language, stack.prompt the stack. Those two
-# are bootstrapped only when absent; every other article is kept up to date.
+# prompts: project.prompt holds the language, stack.prompt the stack, and
+# local-*.prompt is the documented per-project specialization slot (see the
+# Constitution section of README.md). Those are bootstrapped from the pack only
+# when absent; every other article is kept up to date.
 sync_articles() {
   local src_dir="$1"
   [[ -d "$src_dir" ]] || return 0
   local src rel
   while IFS= read -r -d '' src; do
     rel="${src#$src_dir/}"
-    if [[ ( "$rel" == "project.prompt" || "$rel" == "stack.prompt" ) \
+    if [[ ( "$rel" == "project.prompt" || "$rel" == "stack.prompt" \
+            || "$rel" == local-*.prompt ) \
           && -f "$WORKING_DIR/swarmforge/constitution/articles/$rel" ]]; then
       continue
     fi

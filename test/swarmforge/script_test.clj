@@ -343,3 +343,56 @@
       (finally
         (p/destroy victim)
         (fs/delete-tree root)))))
+
+(defn- stub-curl!
+  "Put a `curl` on PATH that serves a local tarball instead of hitting GitHub,
+  so update-swarmforge.sh can be exercised offline. Returns the bin dir."
+  [root tarball]
+  (let [bin (fs/path root "bin")]
+    (write-file (fs/path bin "curl")
+                (str "#!/usr/bin/env bash\nexec cat " tarball "\n"))
+    (fs/set-posix-file-permissions (fs/path bin "curl") "rwxr-xr-x")
+    bin))
+
+(deftest update-swarmforge-preserves-project-owned-articles
+  ;; README documents `local-*.prompt` as the per-project specialization slot,
+  ;; but sync_articles only protected project.prompt and stack.prompt, so every
+  ;; update silently reverted a project's specializations. Shared articles must
+  ;; still be kept current -- protecting too much is the opposite failure.
+  (let [root (tmp-dir)
+        upstream (fs/path root "swarm-forge-main")
+        project (fs/path root "project")
+        articles (fs/path project "swarmforge/constitution/articles")
+        tarball (fs/path root "main.tar.gz")]
+    (try
+      ;; What the framework ships.
+      (doseq [f ["engineering.prompt" "workflow.prompt" "handoffs.prompt"
+                 "local-engineering.prompt" "local-workflow.prompt"]]
+        (write-file (fs/path upstream "swarmforge/constitution/articles" f)
+                    (str "FRAMEWORK " f "\n")))
+      (write-file (fs/path upstream "swarmforge/handoff-protocol.md") "protocol\n")
+      (write-file (fs/path upstream "swarmforge/roles/PM.prompt") "pm\n")
+      (write-file (fs/path upstream "swarmforge/scripts/noop.sh") "#!/bin/sh\n")
+      (run {:dir root} "tar" "-czf" (str tarball) "swarm-forge-main")
+
+      ;; What the project owns. local-workflow.prompt is deliberately absent:
+      ;; an article the project has not specialized must still be bootstrapped.
+      (doseq [f ["engineering.prompt" "project.prompt" "stack.prompt"
+                 "local-engineering.prompt"]]
+        (write-file (fs/path articles f) (str "PROJECT " f "\n")))
+
+      (run {:dir project :env {"PATH" (str (stub-curl! root tarball)
+                                           ":" (System/getenv "PATH"))}}
+           (script "update-swarmforge.sh") (str project))
+
+      (let [article #(slurp (str (fs/path articles %)))]
+        (is (str/starts-with? (article "local-engineering.prompt") "PROJECT")
+            "a specialized local-*.prompt must survive an update")
+        (is (str/starts-with? (article "project.prompt") "PROJECT"))
+        (is (str/starts-with? (article "stack.prompt") "PROJECT"))
+        (is (str/starts-with? (article "engineering.prompt") "FRAMEWORK")
+            "shared articles must still be kept current")
+        (is (str/starts-with? (article "local-workflow.prompt") "FRAMEWORK")
+            "an unspecialized local-*.prompt is still bootstrapped from the framework"))
+      (finally
+        (fs/delete-tree root)))))
