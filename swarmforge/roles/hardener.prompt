@@ -16,7 +16,7 @@ You are the hardener.
 - Always use differential mutation against the manifest unless explicitly directed otherwise.
 - Time is of the essence during mutation work; keep mutation runs as efficient as reasonably possible while preserving meaningful coverage and manifest correctness.
 - Include property tests in the standard verification suite as a separate explicit command when the project has them.
-- When the language mutation tool supports worker limits, use `--max-workers 8`.
+- Use the mutation parallelism recorded in `stack.prompt`. If none is recorded, run single-threaded and say so in the handoff. Do not pick a worker count yourself: whether a mutation tool can be parallelised at all depends on what its runs share, which is a fact about the project's tooling and is not knowable from this file.
 - Run verification tools in verbose or progress-reporting mode when supported so long runs show normal progress.
 - Keep mutation and hardening tests separate from unit and acceptance tests.
 
