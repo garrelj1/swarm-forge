@@ -10,8 +10,10 @@ would weaken a goal, keep the fork's behavior; otherwise take upstream's.
 1. **Generic swarm template.** The framework ships project-agnostic. No project
    language, stack, or app specifics are baked into framework files. Per-project
    config — `swarmforge/swarmforge.conf`, `swarmforge/constitution/articles/project.prompt`
-   (the language), `swarmforge/constitution/articles/stack.prompt` — is owned by the downstream project
-   and must never be overwritten by a merge or by `update-swarmforge.sh`.
+   (the language), `swarmforge/constitution/articles/stack.prompt`, and any
+   `swarmforge/constitution/articles/local-*.prompt` (a project's specialization
+   of a shared article) — is owned by the downstream project and must never be
+   overwritten by a merge or by `update-swarmforge.sh`.
 
 2. **Isolated single-swarm operation.** One swarm runs cleanly in one project
    directory, with *all* runtime state under that directory: `.swarmforge/`,
@@ -59,7 +61,7 @@ upstream" on a file listed under Fork Invariants without re-checking the goal.
 | `swarmforge/scripts/swarmforge.bb` | **Daemon hardening.** `stop-handoff-daemon!` must verify via `live-handoffd?` (`ps -p <pid> -o args=` contains `handoffd.bb` **and** this working-dir) before `kill`, and clear a stale pid-file otherwise. `start-handoff-daemon!` must launch under `nohup`. | 2, 3 |
 | `swarmforge/scripts/handoffd.bb` | **Daemon singleton.** `claim-pid-file!` must refuse to start if a live handoffd already owns this project, and clear a stale pid-file otherwise. Upstream's `-main` overwrites the pid-file blindly. | 2, 3 |
 | `swarmforge/scripts/swarm-cleanup.sh` | **Identity-checked kill.** Only `kill -TERM` the daemon PID when `ps` shows it is this project's `handoffd.bb`. Upstream kills the raw PID from the file. | 3 |
-| `swarmforge/scripts/update-swarmforge.sh` | Fork's downstream updater. Must **bootstrap, never overwrite** project-specific files (`swarmforge.conf`, `constitution/articles/project.prompt`, `constitution/articles/stack.prompt`). Upstream doesn't have this script. | 1 |
+| `swarmforge/scripts/update-swarmforge.sh` | Fork's downstream updater. Must **bootstrap, never overwrite** project-specific files (`swarmforge.conf`, `constitution/articles/project.prompt`, `constitution/articles/stack.prompt`, `constitution/articles/local-*.prompt`). Upstream doesn't have this script. | 1 |
 | `swarmforge/constitution/articles/stack.prompt` | Generic stack template, lives in `articles/` on **all** branches (canonical path). Bootstrap-only via `update-swarmforge.sh`. | 1 |
 
 ### `main` branch only
@@ -68,6 +70,9 @@ upstream" on a file listed under Fork Invariants without re-checking the goal.
 |------|--------------|------|
 | `examples/clojureHTW/` | Example swarm config. Upstream deleted it. Restore from HEAD. | 1 |
 | `swarmforge/scripts/swarm-dashboard.sh` | Fork's tiled tmux dashboard. Upstream doesn't have it; it rides along in the `scripts/` sync. Restore from HEAD if a merge drops it. | — |
+| `swarmforge/scripts/swarm_status.bb` / `swarm_status.sh` | Fork's pipeline-occupancy reporter (used by the PM). Upstream doesn't have it; rides along in the `scripts/` sync. Restore from HEAD if a merge drops it. | 2 |
+| `swarmforge/scripts/swarm_gates.bb` / `swarm_gates.sh` | Fork's per-role verification-gate runner (reads a project's `gates.conf`). Upstream doesn't have it; rides along in the `scripts/` sync. Restore from HEAD if a merge drops it. | 2 |
+| `swarmforge/roles/PM.prompt` | Fork's out-of-swarm PM role, pack-independent. Upstream doesn't have it; kept current by `update-swarmforge.sh` regardless of `--pack`. Restore from HEAD if a merge drops it. | 1 |
 | `README.md` | "Examples" and "Dashboard" sections at the bottom. Keep our additions. | — |
 | `.gitignore` | Extra entries (`docs/plans/`, `node_modules/`, `logbook.json`). Keep ours. | — |
 
