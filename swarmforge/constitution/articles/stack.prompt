@@ -37,6 +37,14 @@ optional `summary`), exits 0 on pass and non-zero on any violation.
   Install:     <install command>
   Run:         <command emitting Analyzer Contract JSON with metric=mutation>
   Threshold:   90  # minimum kill rate (%)
+  Parallelism: <worker count, or `1` — see below>
+  # Mutation runs are only safely parallel when they share nothing mutable.
+  # In-process mutants (Stryker over jsdom) parallelise freely. Mutants that
+  # each boot a real process against one database, message queue, or fixture
+  # directory do not: they purge each other's state, and the symptom is
+  # timeouts on mutants that cannot hang, not an obvious collision. If runs
+  # touch a shared resource, either record `1` or give each worker its own
+  # instance and record how to provision them. Unset means single-threaded.
 
 - Complexity:  <tool name, e.g. gocyclo / radon cc / PMD>
   Install:     <install command>
