@@ -1,7 +1,14 @@
 # Handoff Rules
 
 ## Sending Handoffs
-- Write a draft handoff file with only structured headers, then run `swarm_handoff.sh <draft-file>`.
+- Write a draft handoff file with only structured headers, then run
+  `swarm_handoff.sh <draft-file>`.
+- Write that draft **outside** `.swarmforge/handoffs/`. The daemon delivers any
+  `*.handoff` file it finds in the outbox, so a draft written there is sent raw:
+  it never gets the helper's validation, its generated `merge_and_process`
+  payload, or the unique filename that keeps two handoffs from colliding when
+  the recipient archives them. The daemon now rejects such a file to `failed/`
+  rather than delivering it, so the symptom is a handoff that never arrives.
 - Use only these message types:
   - `git_handoff`
   - `note`

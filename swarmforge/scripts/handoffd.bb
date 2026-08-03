@@ -120,13 +120,39 @@
     (spit (str path ".error") (str reason "\n"))
     (move-with-collision path failed-dir)))
 
+;; Written by swarm_handoff.sh and by nothing else, so their absence identifies a
+;; hand-written draft that reached the outbox without going through the helper.
+;; Such a file was never validated and carries no body, so the recipient gets
+;; headers with an empty PAYLOAD and no `merge_and_process <sender> <commit>` to
+;; act on. It also keeps whatever name the agent gave it, and agents reuse one
+;; draft filename -- so a second bypass collides on archive and wedges the
+;; recipient's inbox, which a role is not permitted to repair by hand.
+(def helper-written-fields ["id" "from" "role" "created_at"])
+
+(defn draft-defects
+  "Names of the helper-written fields this message lacks, plus \"body\" when it
+   has none. Empty when the message came through swarm_handoff.sh."
+  [headers body]
+  (cond-> (vec (remove #(seq (str/trim (or (get headers %) ""))) helper-written-fields))
+    (str/blank? body) (conj "body")))
+
 (defn deliver! [roles socket sender-role path]
   (let [filename (fs/file-name path)
         message (parse-message path)
         headers (:headers message)
-        recipients (some-> (get headers "to") (str/split #",") seq)]
-    (if-not recipients
+        recipients (some-> (get headers "to") (str/split #",") seq)
+        defects (draft-defects headers (:body message))]
+    (cond
+      (not recipients)
       (fail! path "missing to header")
+
+      (seq defects)
+      (fail! path (str "not produced by swarm_handoff.sh (missing "
+                       (str/join ", " defects)
+                       "); write the draft outside .swarmforge/handoffs/ and run"
+                       " swarm_handoff.sh <draft-file>"))
+
+      :else
       (do
         (doseq [recipient recipients]
           (let [role-info (get roles recipient)]
