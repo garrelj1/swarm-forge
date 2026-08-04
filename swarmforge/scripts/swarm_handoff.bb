@@ -281,14 +281,16 @@
         tmp-file (fs/path tmp-dir (str filename ".tmp"))
         outbox-file (fs/path outbox-dir filename)
         handoff-body (body type sender canonical-commit (get headers "message"))
+        ;; `role` belongs to every type, not just git_handoff: handoffd treats it
+        ;; as a helper-written field and rejects any message lacking one.
         lines (cond-> [(str "id: " id)
                        (str "from: " sender)
                        (str "to: " (str/join "," recipients))
                        (str "priority: " priority)
-                       (str "type: " type)]
+                       (str "type: " type)
+                       (str "role: " sender)]
                 (= "git_handoff" type)
-                (conj (str "role: " sender)
-                      (str "task: " (get headers "task"))
+                (conj (str "task: " (get headers "task"))
                       (str "commit: " canonical-commit))
                 (= "note" type)
                 (conj (str "message: " (get headers "message")))

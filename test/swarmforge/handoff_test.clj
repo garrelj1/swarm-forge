@@ -280,6 +280,28 @@
         (is (= 2 (:exit done)))
         (is (str/includes? (:err done) "CURRENT_WORK_IS_BATCH"))))))
 
+;; Mirrors handoffd.bb's `helper-written-fields`. The daemon rejects any message
+;; missing one of these as a hand-written draft that bypassed the helper, so
+;; every type swarm_handoff.sh can produce has to carry all of them.
+(def helper-written-fields ["id" "from" "role" "created_at"])
+
+(deftest swarm-handoff-queues-notes-the-daemon-will-accept
+  (let [root (tmp-dir)]
+    (init-repo! root)
+    (setup-project! root)
+    (testing "a queued note carries every field the daemon treats as helper-written"
+      (let [draft (fs/path root "tmp" "note.handoff")]
+        (write-file draft "type: note\nto: receiver\npriority: 00\nmessage: status update\n")
+        (let [result (run {:dir root :env {"SWARMFORGE_ROLE" "sender"}}
+                          (script "swarm_handoff.sh") (str draft))
+              queued (-> (:out result) str/trim (str/replace #"^HANDOFF QUEUED: " ""))]
+          (is (fs/exists? queued))
+          (is (str/includes? (read-file queued) "message: status update\n"))
+          (doseq [field helper-written-fields]
+            (is (seq (str (header queued field)))
+                (str "note handoff is missing helper-written field '" field
+                     "'; handoffd would reject it as a bypassed draft"))))))))
+
 (defn -main [& _]
   (let [{:keys [fail error]} (run-tests 'swarmforge.handoff-test)]
     (System/exit (+ fail error))))
