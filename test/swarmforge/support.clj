@@ -39,7 +39,11 @@
       (spit (str gh)
             (str/join "\n"
                       ["#!/usr/bin/env bash"
-                       (str "echo \"$@\" >> " calls-log)
+                       ;; One line per invocation, whatever the argv contains: a
+                       ;; GraphQL query argument spans lines, and a raw echo
+                       ;; would log it as several calls.
+                       (str "echo \"$@\" | tr '\\n' ' ' >> " calls-log)
+                       (str "echo >> " calls-log)
                        (str "n=$(wc -l < " calls-log ")")
                        "i=$((n-1))"
                        (str "last=" (dec (count entries)))
@@ -63,3 +67,33 @@
   "PATH with `bin` in front, so the stub shadows any real gh."
   [bin]
   (str bin ":" (System/getenv "PATH")))
+
+(defn stub-sibling-scripts!
+  "Copy `scripts` from the real scripts directory into <dir>/scripts, then write
+   `stubs` (name -> bash body) beside them.
+
+   swarm_project resolves swarm_status.sh as its own sibling, the same way
+   swarm_pr_wait resolves swarm_handoff.sh. Copying the script under test into a
+   directory holding a stubbed sibling exercises that resolution rather than
+   working around it."
+  [dir real-scripts-dir scripts stubs]
+  (let [target (fs/path dir "scripts")]
+    (fs/create-dirs target)
+    (doseq [s scripts]
+      (fs/copy (fs/path real-scripts-dir s) (fs/path target s) {:replace-existing true}))
+    (doseq [[name body] stubs]
+      (let [path (fs/path target name)]
+        (spit (str path) (str "#!/usr/bin/env bash\n" body "\n"))
+        (fs/set-posix-file-permissions path "rwxr-xr-x")))
+    (str target)))
+
+(defn status-json
+  "A swarm_status.sh --json payload with the given role states."
+  [roles in-flight]
+  (str "{\"root\":\"/project\",\"roles\":["
+       (str/join "," (for [{:keys [role state task]} roles]
+                       (str "{\"role\":\"" role "\",\"mode\":\"task\",\"state\":\"" state "\""
+                            (when task (str ",\"task\":\"" task "\"")) "}")))
+       "],\"in_flight\":["
+       (str/join "," (map #(str "\"" % "\"") in-flight))
+       "]}"))

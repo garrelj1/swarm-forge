@@ -2,6 +2,7 @@
   (:require [babashka.fs :as fs]
             [babashka.process :as p]
             [clojure.java.shell :as sh]
+            [cheshire.core :as json]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [swarmforge.support :as support]))
@@ -453,4 +454,112 @@
                         (script "swarm_pr_wait.sh") "57" "--repo" "owner/name")]
         (is (= 1 (:exit result)))
         (is (str/includes? (:err result) "57")))
+      (finally (fs/delete-tree root)))))
+
+;; --- swarm_project -----------------------------------------------------------
+
+(def ^:private issues-json
+  (str "[{\"number\":42,\"title\":\"Add login\",\"state\":\"OPEN\","
+       "\"milestone\":{\"title\":\"v0.3\"},\"labels\":[{\"name\":\"enhancement\"}]},"
+       "{\"number\":45,\"title\":\"Rate limit\",\"state\":\"OPEN\","
+       "\"milestone\":{\"title\":\"v0.4\"},\"labels\":[]}]"))
+
+(def ^:private prs-json
+  (str "[{\"number\":57,\"title\":\"Add login\",\"state\":\"OPEN\","
+       "\"headRefName\":\"slice/42-add-login\"}]"))
+
+(def ^:private board-json
+  (str "{\"data\":{\"repository\":{\"projectsV2\":{\"nodes\":[{\"title\":\"Roadmap\","
+       "\"items\":{\"nodes\":[{\"content\":{\"number\":42},"
+       "\"fieldValueByName\":{\"name\":\"In Pipeline\"}}]}}]}}}}"))
+
+(defn- run-project
+  "swarm_project with a stubbed gh and a stubbed swarm_status.sh sibling."
+  [root gh-bodies status-body & args]
+  (let [scripts (support/stub-sibling-scripts!
+                 root scripts-dir ["swarm_project.bb"]
+                 {"swarm_status.sh" (str "cat <<'JSON'\n" status-body "\nJSON")})
+        bin (support/stub-gh! root gh-bodies)]
+    (apply run {:dir root :env {"PATH" (support/path-with bin)} :ok? false}
+           "bb" (str (fs/path scripts "swarm_project.bb")) args)))
+
+(deftest project-joins-the-tracker-to-the-pipeline-on-task-name
+  (let [root (tmp-dir)]
+    (try
+      (let [status (support/status-json
+                    [{:role "PM" :state "idle"}
+                     {:role "coder" :state "working" :task "42-add-login"}]
+                    ["42-add-login"])
+            result (run-project root [issues-json prs-json board-json] status
+                                "--repo" "owner/name" "--json")
+            state (json/parse-string (:out result) true)
+            row (first (filter #(= 42 (:issue %)) (:rows state)))]
+        (is (= 0 (:exit result)))
+        (is (= "Add login" (:title row)))
+        (is (= "42-add-login" (:slice row)) "the slice joins by issue-number prefix")
+        (is (= "coder" (:stage row)) "the live stage comes from the handoff files")
+        (is (= 57 (:pr row)))
+        (is (= "v0.3" (:milestone row)))
+        (is (= "In Pipeline" (:board row))))
+      (finally (fs/delete-tree root)))))
+
+(deftest project-reports-issues-with-no-slice-as-backlog
+  (let [root (tmp-dir)]
+    (try
+      (let [status (support/status-json [{:role "coder" :state "idle"}] [])
+            result (run-project root [issues-json prs-json board-json] status
+                                "--repo" "owner/name" "--json")
+            state (json/parse-string (:out result) true)
+            row (first (filter #(= 45 (:issue %)) (:rows state)))]
+        (is (= "backlog" (:stage row)))
+        (is (nil? (:slice row)))
+        (is (= "v0.4" (:milestone row)))
+        (is (= #{"v0.3" "v0.4"} (set (map :milestone (:rows state))))))
+      (finally (fs/delete-tree root)))))
+
+(deftest project-degrades-when-gh-is-unavailable
+  (let [root (tmp-dir)]
+    (try
+      (let [status (support/status-json
+                    [{:role "coder" :state "working" :task "42-add-login"}]
+                    ["42-add-login"])
+            result (run-project root [{:err "gh: not logged in" :exit 1}] status
+                                "--repo" "owner/name" "--json")
+            state (json/parse-string (:out result) true)]
+        (is (= 0 (:exit result))
+            "a dashboard that goes blank when offline is worse than a partial one")
+        (is (false? (get-in state [:tracker :available])))
+        (is (str/includes? (get-in state [:tracker :reason]) "not logged in"))
+        (is (= ["42-add-login"] (get-in state [:pipeline :in_flight]))
+            "the pipeline half is local and must survive gh being down"))
+      (finally (fs/delete-tree root)))))
+
+(deftest project-passes-repo-explicitly-on-every-gh-call
+  (let [root (tmp-dir)]
+    (try
+      (let [status (support/status-json [{:role "coder" :state "idle"}] [])]
+        (run-project root [issues-json prs-json board-json] status
+                     "--repo" "owner/name" "--json")
+        (let [calls (support/gh-calls root)
+              scoped? #(or (str/includes? % "--repo owner/name")
+                           ;; graphql takes the repository as two variables
+                           (and (str/includes? % "owner=owner")
+                                (str/includes? % "name=name")))]
+          (is (= 3 (count calls)) "issues, pull requests, board")
+          (is (every? scoped? calls)
+              "gh resolves the upstream remote in this fork unless every call names the repository")))
+      (finally (fs/delete-tree root)))))
+
+(deftest project-prints-a-table-by-default
+  (let [root (tmp-dir)]
+    (try
+      (let [status (support/status-json
+                    [{:role "coder" :state "working" :task "42-add-login"}]
+                    ["42-add-login"])
+            result (run-project root [issues-json prs-json board-json] status
+                                "--repo" "owner/name")]
+        (is (= 0 (:exit result)))
+        (is (str/includes? (:out result) "MILESTONE"))
+        (is (str/includes? (:out result) "42-add-login"))
+        (is (str/includes? (:out result) "#57")))
       (finally (fs/delete-tree root)))))
