@@ -3,6 +3,9 @@
 .claude/
 .swarmforge/
 .worktrees/
+# Local planning scratch. Reviewed designs live in docs/design/ and per-slice
+# PM briefs in docs/briefs/; both are tracked, because a brief the PM hands off
+# as a git_handoff has to be something it can commit.
 docs/plans/
 node_modules/
 logbook.json
