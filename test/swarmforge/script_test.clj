@@ -3,7 +3,8 @@
             [babashka.process :as p]
             [clojure.java.shell :as sh]
             [clojure.string :as str]
-            [clojure.test :refer [deftest is testing]]))
+            [clojure.test :refer [deftest is testing]]
+            [swarmforge.support :as support]))
 
 (def repo-root (fs/cwd))
 (def scripts-dir (fs/path repo-root "swarmforge" "scripts"))
@@ -396,3 +397,60 @@
             "an unspecialized local-*.prompt is still bootstrapped from the framework"))
       (finally
         (fs/delete-tree root)))))
+
+;; --- swarm_pr_wait -----------------------------------------------------------
+
+(deftest pr-wait-reports-a-merged-pull-request
+  (let [root (tmp-dir)]
+    (try
+      (let [bin (support/stub-gh! root [support/merged-pr])
+            result (run {:dir root :env {"PATH" (support/path-with bin)} :ok? false}
+                        (script "swarm_pr_wait.sh") "57" "--repo" "owner/name")]
+        (is (= 0 (:exit result)))
+        (is (str/includes? (:out result) "MERGED"))
+        (is (every? #(str/includes? % "--repo owner/name") (support/gh-calls root))
+            "gh resolves the upstream remote in this fork unless --repo is explicit"))
+      (finally (fs/delete-tree root)))))
+
+(deftest pr-wait-reports-a-closed-pull-request
+  (let [root (tmp-dir)]
+    (try
+      (let [bin (support/stub-gh! root [support/closed-pr])
+            result (run {:dir root :env {"PATH" (support/path-with bin)} :ok? false}
+                        (script "swarm_pr_wait.sh") "57" "--repo" "owner/name")]
+        (is (= 2 (:exit result)))
+        (is (str/includes? (:out result) "CLOSED")))
+      (finally (fs/delete-tree root)))))
+
+(deftest pr-wait-polls-again-while-the-pull-request-is-open
+  (let [root (tmp-dir)]
+    (try
+      (let [bin (support/stub-gh! root [support/open-pr support/merged-pr])
+            result (run {:dir root :env {"PATH" (support/path-with bin)} :ok? false}
+                        (script "swarm_pr_wait.sh") "57" "--repo" "owner/name"
+                        "--interval" "1" "--timeout" "30")]
+        (is (= 0 (:exit result)))
+        (is (str/includes? (:out result) "MERGED"))
+        (is (= 2 (count (support/gh-calls root)))))
+      (finally (fs/delete-tree root)))))
+
+(deftest pr-wait-times-out-while-the-pull-request-stays-open
+  (let [root (tmp-dir)]
+    (try
+      (let [bin (support/stub-gh! root [support/open-pr])
+            result (run {:dir root :env {"PATH" (support/path-with bin)} :ok? false}
+                        (script "swarm_pr_wait.sh") "57" "--repo" "owner/name"
+                        "--interval" "1" "--timeout" "2")]
+        (is (= 3 (:exit result)))
+        (is (str/includes? (:out result) "TIMEOUT")))
+      (finally (fs/delete-tree root)))))
+
+(deftest pr-wait-fails-when-gh-cannot-answer
+  (let [root (tmp-dir)]
+    (try
+      (let [bin (support/stub-gh! root [{:err "no such pull request" :exit 1}])
+            result (run {:dir root :env {"PATH" (support/path-with bin)} :ok? false}
+                        (script "swarm_pr_wait.sh") "57" "--repo" "owner/name")]
+        (is (= 1 (:exit result)))
+        (is (str/includes? (:err result) "57")))
+      (finally (fs/delete-tree root)))))

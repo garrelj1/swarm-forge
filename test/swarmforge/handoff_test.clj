@@ -2,7 +2,8 @@
   (:require [babashka.fs :as fs]
             [clojure.java.shell :as sh]
             [clojure.string :as str]
-            [clojure.test :refer [deftest is run-tests testing use-fixtures]]))
+            [clojure.test :refer [deftest is run-tests testing use-fixtures]]
+            [swarmforge.support :as support]))
 
 (def repo-root (fs/cwd))
 (def scripts-dir (fs/path repo-root "swarmforge" "scripts"))
@@ -301,6 +302,30 @@
             (is (seq (str (header queued field)))
                 (str "note handoff is missing helper-written field '" field
                      "'; handoffd would reject it as a bypassed draft"))))))))
+
+(deftest pr-wait-notifies-a-role-when-the-pull-request-resolves
+  (let [root (tmp-dir)]
+    (init-repo! root)
+    (setup-project! root {"PM" "task" "specifier" "task"})
+    (testing "a detached watcher wakes the PM through the normal handoff path"
+      (let [bin (support/stub-gh! root [support/merged-pr])
+            result (run {:dir root
+                         :env {"PATH" (support/path-with bin)
+                               "SWARMFORGE_ROLE" "PM"}
+                         :ok? false}
+                        (script "swarm_pr_wait.sh") "57" "--repo" "owner/name"
+                        "--notify" "PM" "--task" "42-add-login")]
+        (is (= 0 (:exit result)))
+        (let [queued (vec (fs/glob (fs/path root ".swarmforge/handoffs/outbox") "*.handoff"))]
+          (is (= 1 (count queued))
+              "the watcher must queue exactly one note for the PM")
+          (let [body (read-file (first queued))]
+            (is (str/includes? body "message: PR #57 merged for 42-add-login"))
+            (is (str/includes? body "to: PM"))
+            (doseq [field helper-written-fields]
+              (is (seq (str (header (first queued) field)))
+                  (str "watcher note is missing helper-written field '" field
+                       "'; handoffd would reject it as a bypassed draft")))))))))
 
 (defn -main [& _]
   (let [{:keys [fail error]} (run-tests 'swarmforge.handoff-test)]
