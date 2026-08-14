@@ -26,6 +26,19 @@
 (def issue-limit "200")
 (def pr-limit "100")
 
+(defn brief-reason
+  "One readable line from a failed command's stderr.
+
+   A babashka stack trace runs to dozens of lines, and the whole thing ends up
+   rendered as the reason a column is missing. Prefer the `Message:` line it
+   prints, else the first line that says anything."
+  [text]
+  (let [lines (remove str/blank? (str/split-lines (str text)))
+        message (first (filter #(str/starts-with? (str/trim %) "Message:") lines))
+        line (str/trim (or message (first lines) ""))
+        line (str/replace line #"^Message:\s*" "")]
+    (if (> (count line) 160) (str (subs line 0 157) "...") line)))
+
 (defn- sh-out [& args]
   (let [{:keys [out exit]} (apply process/sh {:continue true} args)]
     (when (zero? exit) (str/trim out))))
@@ -50,7 +63,7 @@
       (try
         (json/parse-string out true)
         (catch Exception e {:available false :reason (str "unparseable swarm_status output: " (ex-message e))}))
-      {:available false :reason (str/trim (str err))})))
+      {:available false :reason (brief-reason err)})))
 
 (defn holder
   "The role currently holding this task, or nil. `working` and `queued(n)` both
@@ -95,7 +108,7 @@
       (try
         {:ok? true :value (json/parse-string out true)}
         (catch Exception e {:ok? false :reason (str "unparseable gh output: " (ex-message e))}))
-      {:ok? false :reason (let [text (str/trim (str err))]
+      {:ok? false :reason (let [text (brief-reason err)]
                             (if (str/blank? text) (str "gh exited " exit) text))})))
 
 (defn board-status-by-issue
@@ -218,8 +231,13 @@
                              (str "#" (:pr r) " " (str/lower-case (str (:pr_state r))))
                              "—")))))
       (println)
-      (println (format "%d in flight · %d awaiting merge · %d backlog"
-                       (:in_flight summary) (:awaiting_merge summary) (:backlog summary))))))
+      ;; "0 in flight" and "could not tell" are different answers, and reading
+      ;; the first when the second is true is how a stalled swarm looks idle.
+      (if (false? (:available pipeline))
+        (println (format "pipeline unavailable (%s) · %d awaiting merge · %d backlog"
+                         (:reason pipeline) (:awaiting_merge summary) (:backlog summary)))
+        (println (format "%d in flight · %d awaiting merge · %d backlog"
+                         (:in_flight summary) (:awaiting_merge summary) (:backlog summary)))))))
 
 (defn -main [& args]
   (let [args (vec args)
