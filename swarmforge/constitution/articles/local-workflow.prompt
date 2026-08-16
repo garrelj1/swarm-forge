@@ -3,3 +3,15 @@
 ## QA Handoffs
 - A QA handoff does not interrupt current work. If a QA wake-up arrives while working, ignore it and let `done_with_current.sh` deliver the next queued task or batch after the current work is complete.
 - When a helper-delivered QA task is only an audit/completion notification, acknowledge the printed payload, rely on the handoff audit files for recordkeeping, and do not apply role-specific work to that QA handoff.
+
+## Slice Rules
+- A slice is one trip through the pipeline. Its name is `<issue-number>-<slug>`, for example `42-add-login`. The PM invents it, every `git_handoff` forwards it unchanged in the `task:` header, and it is the key that joins the handoff, the issue, the branch, and the pull request without a side file.
+- The slice branch is `slice/<task-name>`, cut from the base branch named in `.swarmforge/base-branch` by the specifier when it accepts the PM's brief.
+- Every slice pull request body must contain `Closes #<issue>`, so the merge closes the issue the PM briefed.
+- Pass `--repo` on every `gh` call. This repository has an `upstream` remote and `gh` resolves that one when left to guess, which silently targets the wrong repository.
+- Never squash-merge a slice pull request. Downstream roles work on long-lived `swarmforge-<role>` branches whose history returns to the slice branch when the specifier merges QA's commit. Merge commits keep that a no-op, because the content is already in the base branch; squashing leaves those commits absent from it, so they reappear in every later slice's pull request.
+- If a slice is abandoned rather than merged, its commits stay in the role worktrees and will surface in the next slice's pull request until those branches are reset by hand.
+
+## PM Handoffs
+- The PM is the pipeline's entry point and is not a reviewer. Only the specifier sends it handoffs, and only to report that a slice's pull request is open.
+- Do not send the PM `git_handoff` messages; it does not merge or process work.
