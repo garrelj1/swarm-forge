@@ -48,6 +48,7 @@ The normal flow is `specifier` -> `coder` -> `refactorer` -> `architect` -> `spe
 
 `six-pack` is the full workflow. Use it for major projects that require full specification, up-front QA, backend verification, and significant architectural consideration. It separates each major quality gate into its own role:
 
+- `PM` owns the backlog, milestones, and project board, briefs the next slice onto an issue, and hands it to the specifier.
 - `specifier` turns user intent into accepted Gherkin specifications and end-to-end QA procedures.
 - `coder` implements approved behavior slices with TDD, unit tests, and generated acceptance tests.
 - `cleaner` performs local behavior-preserving cleanup, coverage improvement, CRAP and DRY review, and mutation-site scans.
@@ -55,7 +56,7 @@ The normal flow is `specifier` -> `coder` -> `refactorer` -> `architect` -> `spe
 - `hardener` performs mutation hardening, language mutation, CRAP and DRY verification, and soft Gherkin mutation.
 - `QA` converts the specifier's QA procedures into executable scripts, runs final user-interface verification, checks handoff consistency, and sends completion notifications.
 
-The normal flow is `specifier` -> `coder` -> `cleaner` -> `architect` -> `hardener` -> `QA` -> completion. Use this branch when you want each review and verification concern owned by a separate agent.
+The normal flow is `PM` -> `specifier` -> `coder` -> `cleaner` -> `architect` -> `hardener` -> `QA`, and then back out: the specifier cuts a `slice/<task>` branch off trunk when it accepts the PM's brief, and opens the pull request when QA completes. The PM waits for that pull request to merge, does the tracker upkeep it implies, and offers three candidate next slices for you to choose between. Use this branch when you want each review and verification concern owned by a separate agent, and program management driving the queue rather than sitting beside it.
 
 ## Prerequisites
 
@@ -172,17 +173,22 @@ For example, `main` can provide a shared `workflow.prompt`, while `six-pack` can
 
 Each role in `swarmforge/swarmforge.conf` maps to a corresponding `swarmforge/roles/<role>.prompt` file.
 
-### The PM (out-of-swarm role)
+### The PM
 
-`swarmforge/roles/PM.prompt` lives on `main` because it is pack-independent: the PM is launched by the user *outside* the swarm and must not get a `swarmforge.conf` window. It works from the main checkout on the repository's base branch, owns the issue backlog, the project board, the roadmap, and cross-task sequencing, and touches only `docs/` and tracker state — never product code, specs, tests, or another role's prompt.
+`swarmforge/roles/PM.prompt` lives on `main` because it is pack-independent. It owns the issue backlog, the project board, the roadmap, and cross-task sequencing, and touches only `docs/` and tracker state — never product code, specs, tests, or another role's prompt.
 
-The PM has no handoff channel into the swarm. It produces a brief at `docs/plans/YYYY-MM-DD-<slug>-brief.md`, and the user carries the issue number and brief path to the pipeline's entry role. The prompt reads `swarmforge/swarmforge.conf` at startup to learn which roles this project runs and which one is the entry role, so it works unchanged on `two-pack`, `four-pack`, and `six-pack`.
+It decides its own wiring at startup from `swarmforge/swarmforge.conf`, which also tells it which roles this project runs and which one is the entry role:
 
-Start it yourself in the project directory with any supported backend, using the same bootstrap phrasing the launcher uses for in-swarm roles:
+- **In-swarm** — the config has a `window PM` line, as `six-pack` does. The PM is an ordinary role with its own worktree and inbox. It commits a brief at `docs/briefs/<issue>-<slug>.md` and sends the entry role a `git_handoff`, so the brief travels with the slice and lands in its pull request.
+- **Outside the swarm** — no `window PM` line, as on `two-pack` and `four-pack`. The PM works from the main checkout on the base branch and hands off through you: it produces the brief and gives you the issue number and path to carry to the entry role's session.
+
+Outside the swarm, start it yourself in the project directory with any supported backend, using the same bootstrap phrasing the launcher uses for in-swarm roles:
 
 ```sh
 claude "Read swarmforge/roles/PM.prompt, then read every file it refers to recursively, and follow all of those instructions."
 ```
+
+The PM never merges a pull request — you do. When one is open it launches `swarm_pr_wait.sh` detached, which notifies it through the normal handoff channel once the pull request resolves, so it spends no turns waiting.
 
 The PM does not read the full constitution. Its prompt tells it which project files to read — `swarmforge/swarmforge.conf`, the roadmap document, and any handoff-pacing rule in `swarmforge/constitution/articles/project.prompt` — because the constitution's engineering and handoff articles govern in-swarm roles the PM is not one of.
 
@@ -386,4 +392,16 @@ swarmforge/scripts/swarm-dashboard.sh [working-dir]   # defaults to $PWD
 ```
 
 Set `SWARM_DASH_COLS` to control the column count (default `3`). Pane borders show role names; press `Ctrl-b m` to toggle mouse mode (off = scroll the focused agent, on = click-to-focus a pane).
+
+That dashboard shows the agents. Two other commands show the *work*:
+
+```sh
+swarmforge/scripts/swarm_status.sh          # live pipeline: which role holds what, for how long
+swarmforge/scripts/swarm_project.sh         # the tracker joined to the pipeline, grouped by milestone
+swarmforge/scripts/swarm_web.sh --port 7777 # the same, as a page on http://127.0.0.1:7777
+```
+
+`swarm_status.sh` reads only the handoff files, so it is offline and instant; `--json`, `--quiet`, and `--task <name>` give the machine-readable, occupancy-check, and single-task-route views. `swarm_project.sh` adds tracker state from `gh` — issues, milestones, pull requests, and the board's Status field — joining the two halves on the task name, whose issue-number prefix (`42-add-login`) makes handoff, issue, branch, and pull request line up without a side file. `swarm_web.sh` serves that same state as a self-refreshing page, bound to localhost and read-only.
+
+If `gh` is logged out, offline, or rate-limited, both degrade to the pipeline half and say why rather than going blank.
 

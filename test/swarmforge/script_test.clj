@@ -2,8 +2,11 @@
   (:require [babashka.fs :as fs]
             [babashka.process :as p]
             [clojure.java.shell :as sh]
+            [babashka.http-client :as http]
+            [cheshire.core :as json]
             [clojure.string :as str]
-            [clojure.test :refer [deftest is testing]]))
+            [clojure.test :refer [deftest is testing]]
+            [swarmforge.support :as support]))
 
 (def repo-root (fs/cwd))
 (def scripts-dir (fs/path repo-root "swarmforge" "scripts"))
@@ -396,3 +399,281 @@
             "an unspecialized local-*.prompt is still bootstrapped from the framework"))
       (finally
         (fs/delete-tree root)))))
+
+;; --- swarm_pr_wait -----------------------------------------------------------
+
+(deftest pr-wait-reports-a-merged-pull-request
+  (let [root (tmp-dir)]
+    (try
+      (let [bin (support/stub-gh! root [support/merged-pr])
+            result (run {:dir root :env {"PATH" (support/path-with bin)} :ok? false}
+                        (script "swarm_pr_wait.sh") "57" "--repo" "owner/name")]
+        (is (= 0 (:exit result)))
+        (is (str/includes? (:out result) "MERGED"))
+        (is (every? #(str/includes? % "--repo owner/name") (support/gh-calls root))
+            "gh resolves the upstream remote in this fork unless --repo is explicit"))
+      (finally (fs/delete-tree root)))))
+
+(deftest pr-wait-reports-a-closed-pull-request
+  (let [root (tmp-dir)]
+    (try
+      (let [bin (support/stub-gh! root [support/closed-pr])
+            result (run {:dir root :env {"PATH" (support/path-with bin)} :ok? false}
+                        (script "swarm_pr_wait.sh") "57" "--repo" "owner/name")]
+        (is (= 2 (:exit result)))
+        (is (str/includes? (:out result) "CLOSED")))
+      (finally (fs/delete-tree root)))))
+
+(deftest pr-wait-polls-again-while-the-pull-request-is-open
+  (let [root (tmp-dir)]
+    (try
+      (let [bin (support/stub-gh! root [support/open-pr support/merged-pr])
+            result (run {:dir root :env {"PATH" (support/path-with bin)} :ok? false}
+                        (script "swarm_pr_wait.sh") "57" "--repo" "owner/name"
+                        "--interval" "1" "--timeout" "30")]
+        (is (= 0 (:exit result)))
+        (is (str/includes? (:out result) "MERGED"))
+        (is (= 2 (count (support/gh-calls root)))))
+      (finally (fs/delete-tree root)))))
+
+(deftest pr-wait-times-out-while-the-pull-request-stays-open
+  (let [root (tmp-dir)]
+    (try
+      (let [bin (support/stub-gh! root [support/open-pr])
+            result (run {:dir root :env {"PATH" (support/path-with bin)} :ok? false}
+                        (script "swarm_pr_wait.sh") "57" "--repo" "owner/name"
+                        "--interval" "1" "--timeout" "2")]
+        (is (= 3 (:exit result)))
+        (is (str/includes? (:out result) "TIMEOUT")))
+      (finally (fs/delete-tree root)))))
+
+(deftest pr-wait-fails-when-gh-cannot-answer
+  (let [root (tmp-dir)]
+    (try
+      (let [bin (support/stub-gh! root [{:err "no such pull request" :exit 1}])
+            result (run {:dir root :env {"PATH" (support/path-with bin)} :ok? false}
+                        (script "swarm_pr_wait.sh") "57" "--repo" "owner/name")]
+        (is (= 1 (:exit result)))
+        (is (str/includes? (:err result) "57")))
+      (finally (fs/delete-tree root)))))
+
+;; --- swarm_project -----------------------------------------------------------
+
+(def ^:private issues-json
+  (str "[{\"number\":42,\"title\":\"Add login\",\"state\":\"OPEN\","
+       "\"milestone\":{\"title\":\"v0.3\"},\"labels\":[{\"name\":\"enhancement\"}]},"
+       "{\"number\":45,\"title\":\"Rate limit\",\"state\":\"OPEN\","
+       "\"milestone\":{\"title\":\"v0.4\"},\"labels\":[]}]"))
+
+(def ^:private prs-json
+  (str "[{\"number\":57,\"title\":\"Add login\",\"state\":\"OPEN\","
+       "\"headRefName\":\"slice/42-add-login\"}]"))
+
+(def ^:private board-json
+  (str "{\"data\":{\"repository\":{\"projectsV2\":{\"nodes\":[{\"title\":\"Roadmap\","
+       "\"items\":{\"nodes\":[{\"content\":{\"number\":42},"
+       "\"fieldValueByName\":{\"name\":\"In Pipeline\"}}]}}]}}}}"))
+
+(defn- run-project
+  "swarm_project with a stubbed gh and a stubbed swarm_status.sh sibling."
+  [root gh-bodies status-body & args]
+  (let [scripts (support/stub-sibling-scripts!
+                 root scripts-dir ["swarm_project.bb"]
+                 {"swarm_status.sh" (str "cat <<'JSON'\n" status-body "\nJSON")})
+        bin (support/stub-gh! root gh-bodies)]
+    (apply run {:dir root :env {"PATH" (support/path-with bin)} :ok? false}
+           "bb" (str (fs/path scripts "swarm_project.bb")) args)))
+
+(deftest project-joins-the-tracker-to-the-pipeline-on-task-name
+  (let [root (tmp-dir)]
+    (try
+      (let [status (support/status-json
+                    [{:role "PM" :state "idle"}
+                     {:role "coder" :state "working" :task "42-add-login"}]
+                    ["42-add-login"])
+            result (run-project root [issues-json prs-json board-json] status
+                                "--repo" "owner/name" "--json")
+            state (json/parse-string (:out result) true)
+            row (first (filter #(= 42 (:issue %)) (:rows state)))]
+        (is (= 0 (:exit result)))
+        (is (= "Add login" (:title row)))
+        (is (= "42-add-login" (:slice row)) "the slice joins by issue-number prefix")
+        (is (= "coder" (:stage row)) "the live stage comes from the handoff files")
+        (is (= 57 (:pr row)))
+        (is (= "v0.3" (:milestone row)))
+        (is (= "In Pipeline" (:board row))))
+      (finally (fs/delete-tree root)))))
+
+(deftest project-reports-issues-with-no-slice-as-backlog
+  (let [root (tmp-dir)]
+    (try
+      (let [status (support/status-json [{:role "coder" :state "idle"}] [])
+            result (run-project root [issues-json prs-json board-json] status
+                                "--repo" "owner/name" "--json")
+            state (json/parse-string (:out result) true)
+            row (first (filter #(= 45 (:issue %)) (:rows state)))]
+        (is (= "backlog" (:stage row)))
+        (is (nil? (:slice row)))
+        (is (= "v0.4" (:milestone row)))
+        (is (= #{"v0.3" "v0.4"} (set (map :milestone (:rows state))))))
+      (finally (fs/delete-tree root)))))
+
+(deftest project-degrades-when-gh-is-unavailable
+  (let [root (tmp-dir)]
+    (try
+      (let [status (support/status-json
+                    [{:role "coder" :state "working" :task "42-add-login"}]
+                    ["42-add-login"])
+            result (run-project root [{:err "gh: not logged in" :exit 1}] status
+                                "--repo" "owner/name" "--json")
+            state (json/parse-string (:out result) true)]
+        (is (= 0 (:exit result))
+            "a dashboard that goes blank when offline is worse than a partial one")
+        (is (false? (get-in state [:tracker :available])))
+        (is (str/includes? (get-in state [:tracker :reason]) "not logged in"))
+        (is (= ["42-add-login"] (get-in state [:pipeline :in_flight]))
+            "the pipeline half is local and must survive gh being down"))
+      (finally (fs/delete-tree root)))))
+
+(deftest project-passes-repo-explicitly-on-every-gh-call
+  (let [root (tmp-dir)]
+    (try
+      (let [status (support/status-json [{:role "coder" :state "idle"}] [])]
+        (run-project root [issues-json prs-json board-json] status
+                     "--repo" "owner/name" "--json")
+        (let [calls (support/gh-calls root)
+              scoped? #(or (str/includes? % "--repo owner/name")
+                           ;; graphql takes the repository as two variables
+                           (and (str/includes? % "owner=owner")
+                                (str/includes? % "name=name")))]
+          (is (= 3 (count calls)) "issues, pull requests, board")
+          (is (every? scoped? calls)
+              "gh resolves the upstream remote in this fork unless every call names the repository")))
+      (finally (fs/delete-tree root)))))
+
+(deftest project-prints-a-table-by-default
+  (let [root (tmp-dir)]
+    (try
+      (let [status (support/status-json
+                    [{:role "coder" :state "working" :task "42-add-login"}]
+                    ["42-add-login"])
+            result (run-project root [issues-json prs-json board-json] status
+                                "--repo" "owner/name")]
+        (is (= 0 (:exit result)))
+        (is (str/includes? (:out result) "MILESTONE"))
+        (is (str/includes? (:out result) "42-add-login"))
+        (is (str/includes? (:out result) "#57")))
+      (finally (fs/delete-tree root)))))
+
+;; --- swarm_web ---------------------------------------------------------------
+
+(defn- free-port []
+  (with-open [s (java.net.ServerSocket. 0)]
+    (.getLocalPort s)))
+
+(defn- await-server!
+  "Poll until the server answers or we give up, so a slow bb start-up cannot
+   make the suite flaky."
+  [port]
+  (loop [tries 100]
+    (let [ok? (try
+                (http/get (str "http://127.0.0.1:" port "/api/state") {:throw false})
+                true
+                (catch Exception _ false))]
+      (cond
+        ok? true
+        (zero? tries) (throw (ex-info "swarm_web never came up" {:port port}))
+        :else (do (Thread/sleep 100) (recur (dec tries)))))))
+
+(defn- with-web-server
+  "Start swarm_web against stubbed siblings, run f with the port, always stop it."
+  [root gh-bodies f]
+  (let [scripts (support/stub-sibling-scripts!
+                 root scripts-dir
+                 ["swarm_web.bb" "swarm_project.bb" "swarm_project.sh"]
+                 {"swarm_status.sh" (str "echo call >> " (str (fs/path root "status-calls.log")) "\n"
+                                         "cat <<'JSON'\n"
+                                         (support/status-json
+                                          [{:role "coder" :state "working" :task "42-add-login"}]
+                                          ["42-add-login"])
+                                         "\nJSON")})
+        bin (support/stub-gh! root gh-bodies)
+        port (free-port)
+        proc (p/process ["bb" (str (fs/path scripts "swarm_web.bb"))
+                         "--port" (str port) "--repo" "owner/name"]
+                        {:dir (str root)
+                         :extra-env {"PATH" (support/path-with bin)}
+                         :out :inherit :err :inherit})]
+    (try
+      (await-server! port)
+      (f port)
+      (finally
+        (p/destroy-tree proc)))))
+
+(deftest web-serves-state-and-a-page
+  (let [root (tmp-dir)]
+    (try
+      (with-web-server
+        root [issues-json prs-json board-json]
+        (fn [port]
+          (let [api (http/get (str "http://127.0.0.1:" port "/api/state") {:throw false})
+                page (http/get (str "http://127.0.0.1:" port "/") {:throw false})
+                missing (http/get (str "http://127.0.0.1:" port "/nope") {:throw false})
+                state (json/parse-string (:body api) true)]
+            (is (= 200 (:status api)))
+            (is (= 42 (:issue (first (:rows state)))))
+            (is (= "42-add-login" (get-in state [:pipeline_live :in_flight 0]))
+                "the page needs live pipeline state, not only the cached snapshot")
+            (is (= 200 (:status page)))
+            (is (str/includes? (:body page) "<html"))
+            (is (= 404 (:status missing))))))
+      (finally (fs/delete-tree root)))))
+
+(deftest web-caches-the-tracker-but-not-the-pipeline
+  (let [root (tmp-dir)]
+    (try
+      (with-web-server
+        root [issues-json prs-json board-json]
+        (fn [port]
+          (dotimes [_ 3]
+            (http/get (str "http://127.0.0.1:" port "/api/state") {:throw false}))
+          (let [gh-calls (count (support/gh-calls root))
+                status-calls (count (str/split-lines
+                                     (slurp (str (fs/path root "status-calls.log")))))]
+            (is (= 3 gh-calls)
+                "gh costs a second or two per call, so the tracker half is cached")
+            (is (>= status-calls 4)
+                "the pipeline half is filesystem-cheap and must refresh every request"))))
+      (finally (fs/delete-tree root)))))
+
+(deftest project-says-so-when-the-pipeline-half-is-unavailable
+  (let [root (tmp-dir)]
+    (try
+      ;; Stderr shaped like a real babashka failure: the useful sentence is
+      ;; buried in a stack trace dozens of lines long.
+      (let [scripts (support/stub-sibling-scripts!
+                     root scripts-dir ["swarm_project.bb"]
+                     {"swarm_status.sh"
+                      (str "cat >&2 <<'ERR'\n"
+                           "----- Error --------------------------------------------\n"
+                           "Type:     clojure.lang.ExceptionInfo\n"
+                           "Message:  Cannot find SwarmForge project root\n"
+                           "Data:     {:exit 1}\n"
+                           "----- Stack trace --------------------------------------\n"
+                           "swarm-status/project-root - swarm_status.bb:42:15\n"
+                           "ERR\n"
+                           "exit 1")})
+            bin (support/stub-gh! root [issues-json prs-json board-json])
+            result (run {:dir root :env {"PATH" (support/path-with bin)} :ok? false}
+                        "bb" (str (fs/path scripts "swarm_project.bb"))
+                        "--repo" "owner/name")
+            summary (last (remove str/blank? (str/split-lines (:out result))))]
+        (is (= 0 (:exit result)))
+        (is (str/includes? (:out result) "pipeline unavailable")
+            "reporting 0 in flight when the pipeline could not be read makes a stalled swarm look idle")
+        (is (not (str/includes? (:out result) "0 in flight")))
+        (is (str/includes? summary "Cannot find SwarmForge project root")
+            "the reason must be the useful sentence, not the whole stack trace")
+        (is (not (str/includes? summary "Stack trace")))
+        (is (< (count summary) 200) "a stack trace pasted into the summary line is unreadable"))
+      (finally (fs/delete-tree root)))))
